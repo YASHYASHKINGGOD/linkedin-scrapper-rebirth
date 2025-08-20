@@ -11,6 +11,14 @@ Key docs to read next:
 
 ## Quickstart
 ```bash
+make setup
+python -m pip install -r requirements.txt  # install Google APIs
+cp .env.example .env
+# Fill GOOGLE_OAUTH_CLIENT_JSON by downloading OAuth client JSON
+# Then run and authorize once in browser:
+GOOGLE_SHEETS_URLS="https://docs.google.com/spreadsheets/d/14OmQuYyreTa_ehui2vGXbydNpMsJCrCTArolMozuPG0/edit?gid=1790709853" python -m src.app
+```
+```bash
 # clone or unzip this project, then:
 make setup
 cp .env.example .env   # fill placeholders (no real secrets)

@@ -15,7 +15,7 @@ build:
 
 test:
 	[ -f package.json ] && npm test --silent || true
-	[ -f pytest.ini -o -f pyproject.toml -o -f requirements.txt ] && pytest -q || true
+	[ -f pytest.ini -o -f pyproject.toml -o -f requirements.txt -o -d tests ] && pytest -q || true
 
 lint:
 	[ -f package.json ] && npm run lint || true

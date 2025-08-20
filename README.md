@@ -16,7 +16,12 @@ python -m pip install -r requirements.txt  # install Google APIs
 cp .env.example .env
 # Fill GOOGLE_OAUTH_CLIENT_JSON by downloading OAuth client JSON
 # Then run and authorize once in browser:
-GOOGLE_SHEETS_URLS="https://docs.google.com/spreadsheets/d/14OmQuYyreTa_ehui2vGXbydNpMsJCrCTArolMozuPG0/edit?gid=1790709853" python -m src.app
+GOOGLE_SHEETS_URLS="https://docs.google.com/spreadsheets/d/14OmQuYyreTa_ehui2vGXbydNpMsJCrCTArolMozuPG0/edit?gid=1790709853" OUTPUT_JSONL=./storage/linkedin_links.jsonl python -m src.app
+
+# or via YAML config for many sheets
+cp config/sheets.yaml.sample config/sheets.yaml
+# edit config/sheets.yaml and then run
+SHEETS_CONFIG=./config/sheets.yaml OUTPUT_JSONL=./storage/linkedin_links.jsonl python -m src.app
 ```
 ```bash
 # clone or unzip this project, then:

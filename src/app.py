@@ -1,7 +1,9 @@
 from __future__ import annotations
 import os
 import json
-from typing import List
+from typing import List, Iterable
+import yaml  # type: ignore
+from src.extractor.common.io import write_jsonl
 
 from src.extractor.google_sheets import (
     ensure_credentials,
@@ -54,10 +56,41 @@ def extract_from_urls(urls: List[str]) -> List[str]:
     return unique
 
 
-if __name__ == "__main__":
+def load_urls_from_env_and_config() -> List[str]:
+    urls: List[str] = []
+    # From env list
     url_env = os.environ.get("GOOGLE_SHEETS_URLS", "").strip()
-    if not url_env:
-        raise SystemExit("Set GOOGLE_SHEETS_URLS to a comma-separated list of Google Sheet URLs.")
-    urls = [u.strip() for u in url_env.split(",") if u.strip()]
+    if url_env:
+        urls.extend([u.strip() for u in url_env.split(",") if u.strip()])
+    # From YAML config
+    cfg_path = os.environ.get("SHEETS_CONFIG", "").strip()
+    if cfg_path and os.path.exists(cfg_path):
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+            urls.extend(list(data.get("sheets", []) or []))
+    # Unique preserve order
+    seen = set()
+    out = []
+    for u in urls:
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
+
+
+def save_links_jsonl(links: Iterable[str], source_urls: List[str], out_path: str) -> int:
+    records = (
+        {"url": link, "source": "google_sheets", "source_urls": source_urls}
+        for link in links
+    )
+    return write_jsonl(out_path, records)
+
+
+if __name__ == "__main__":
+    urls = load_urls_from_env_and_config()
+    if not urls:
+        raise SystemExit("Provide at least one Sheets URL via GOOGLE_SHEETS_URLS or SHEETS_CONFIG.")
     result = extract_from_urls(urls)
-    print(json.dumps({"count": len(result), "links": result}, indent=2))
+    out_path = os.environ.get("OUTPUT_JSONL", "./storage/linkedin_links.jsonl")
+    written = save_links_jsonl(result, urls, out_path)
+    print(json.dumps({"count": len(result), "written": written, "output": out_path}, indent=2))

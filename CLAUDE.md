@@ -1,11 +1,60 @@
 # Project memory & rules (Claude + Warp)
 
-Read order: WARP.md → DESIGN.md → planning.md → tasks.md → README.md.
+## LinkedIn Scrapper Rebirth — Production-Ready Pipeline
+
+This is a comprehensive LinkedIn job scraping and application automation system designed for 24×7 reliability with enterprise-grade observability, compliance, and data quality controls.
+
+### Read order (MANDATORY)
+WARP.md → DESIGN.md → planning.md → tasks.md → README.md → OPERATING_MANUAL.md
+
+## Project Understanding (Updated 2025-08-22)
+
+### Core Mission
+Transform LinkedIn job/post links into actionable application routes through a fully automated, schema-validated pipeline with anti-bot protection and LLM-powered data normalization.
+
+### Architecture Overview
+**End-to-End Flow:** Ingest → Classify → Scrape (bronze) → Stage (silver) → LLM Extract (gold) → Route → Apply
+
+**Key Components:**
+1. **Ingestor** - Multi-source ingestion (Notion, Google Sheets, Manual API) → `linkedin_links`
+2. **Classifier** - Fast rules/heuristics to identify job vs post links
+3. **Scrapers** - Playwright/Puppeteer with stealth mode, session pools, human-like delays
+4. **LLM Extractor** - DeepSeek V3 with versioned prompts, JSON Schema validation, full audit trails
+5. **Router** - Builds application routes (email, DM, job links, comment links, external forms)
+6. **Orchestrator** - Temporal/Celery workflows with retries, exponential backoff, DLQ
+7. **Observer** - OpenTelemetry traces, Prometheus metrics, Grafana dashboards, Sentry errors
+
+### Data Model & Storage
+- **PostgreSQL 14+** as system of record with comprehensive schema
+- **Local storage** under `./storage` for HTML artifacts, screenshots, LLM I/O
+- **Redis** for rate limits, locks, and queue management
+- **Schema validation** enforced at every LLM extraction with audit logging
+
+### Key Tables
+- `linkedin_links` - Ingestion queue with canonical URL deduplication
+- `linkedin_jobs_raw` / `linkedin_posts_raw` - Bronze layer (raw scraped data)
+- `companies` / `jobs` - Gold layer (LLM-normalized, schema-validated)
+- `application_routes` / `application_attempts` - Routing and outcome tracking
+- `llm_extractions` - Full audit trail of LLM operations with prompt versioning
+
+### Compliance & Safety
+- **Anti-bot protection** with stealth scraping, low concurrency, no proxies in local mode
+- **Rate limiting** with per-ASN caps and respectful site terms compliance
+- **PII masking** in logs, HTTPS enforcement, encryption at rest
+- **Schema drift protection** with versioned prompts and validation rollback
+- **Secrets management** via .env for local dev (no real secrets committed)
+
+### Quality Standards
+- **SLOs**: p95 ingest→job <10min, ≥95% valid extractions daily, zero duplicates/24h
+- **Idempotency** via canonical URLs and content hashing
+- **Deduplication** at multiple layers (URL, content, job similarity)
+- **Observability** with full trace propagation and alerting on SLO violations
 
 ## Goals
 - One-command bootstrap & test on any machine
 - Small design before implementation; acceptance criteria defined
 - Every change updates tests and docs
+- Maintain `make check` green at all times
 
 ## Code standards
 - Runtimes pinned by .tool-versions / .nvmrc
@@ -13,26 +62,43 @@ Read order: WARP.md → DESIGN.md → planning.md → tasks.md → README.md.
 - Branches: feat/<slug>, fix/<slug>, chore/<slug>
 - Commits: Conventional Commits
 
-## Commands
-- Bootstrap: make setup
-- Dev: make dev
-- Run: make start
-- Format: make fmt | Lint: make lint | Types: make typecheck
-- Tests: make test
-- Gate: make check
+## Commands (Makefile Contract)
+- Bootstrap: `make setup`
+- Dev: `make dev`
+- Run: `make start`
+- Format: `make fmt` | Lint: `make lint` | Types: `make typecheck`
+- Tests: `make test`
+- Gate: `make check` (fmt + lint + typecheck + test)
 
 ## Work protocol (each session)
 1) Read docs above and restate the next task
-2) Implement in small commits; keep make check green
+2) Implement in small commits; keep `make check` green
 3) Update tasks.md; copy SESSION_TEMPLATE.md → sessions/SESSION-YYYY-MM-DD.md with exact commands run
-4) Append a “Session YYYY-MM-DD” note here
+4) Append a "Session YYYY-MM-DD" note here
 
 ## Project specifics
-- Architecture: Ingest → Classify → Scrape (bronze) → Stage (silver) → Extract LLM (gold) → Route
-- Data model: see DESIGN.md (Postgres 14+ DDL provided)
-- Queues: ingest.links, scrape.job, scrape.post, extract.llm, route.build, dead.letter
-- SLOs: p95 ingest→job <10m; 95%+ valid extraction daily; zero dupes/24h
+- **Architecture**: Ingest → Classify → Scrape (bronze) → Stage (silver) → Extract LLM (gold) → Route
+- **Data model**: see DESIGN.md (Postgres 14+ DDL provided)
+- **Queues**: ingest.links, scrape.job, scrape.post, extract.llm, route.build, dead.letter
+- **SLOs**: p95 ingest→job <10m; 95%+ valid extraction daily; zero dupes/24h
+- **Local-first**: No cloud dependencies, everything runs locally with ./storage
+- **Primary LLM**: DeepSeek V3 with budget guardrails
+
+## Current Status
+- Project in early planning/setup phase
+- MVP target: Milestone 1 (ingest → jobs pipeline)
+- Focus: Tables + skeleton services + basic scraper + LLM extraction
+
+## Versioning
+- Tags: `<app>-<semver>` (immutable releases)
+- Branches: `<app>-<semver>-dev`
+- Helper scripts: bin/save_version.sh, bin/fork_version.sh, bin/run_version.sh
 
 ## Do not
 - Rely on chat memory; treat repo as the source of truth
 - Add hidden manual steps; everything via scripts/Make targets
+- Commit real secrets (use .env for local dev only)
+- Break anti-bot protections or exceed rate limits
+- Skip schema validation or audit logging
+
+## Session Notes

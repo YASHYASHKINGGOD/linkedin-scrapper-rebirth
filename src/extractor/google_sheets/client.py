@@ -50,7 +50,10 @@ def ensure_credentials(config: Optional[GoogleAuthConfig] = None):
                     f"Google OAuth client credentials not found at {config.credentials_file}. Download the OAuth client JSON and set GOOGLE_OAUTH_CLIENT_JSON."
                 )
             flow = InstalledAppFlow.from_client_secrets_file(config.credentials_file, SCOPES)  # type: ignore
-            creds = flow.run_local_server(port=0)  # type: ignore
+            # Use a fixed localhost port by default to avoid redirect_uri mismatches with non-Desktop OAuth clients.
+            # Configure GOOGLE_OAUTH_REDIRECT_PORT and add http://localhost:<PORT>/ as an Authorized redirect URI if needed.
+            port = int(os.environ.get("GOOGLE_OAUTH_REDIRECT_PORT", "8765"))
+            creds = flow.run_local_server(port=port)  # type: ignore
         # Save the credentials for the next run
         os.makedirs(os.path.dirname(config.token_file), exist_ok=True)
         with open(config.token_file, "w") as token:

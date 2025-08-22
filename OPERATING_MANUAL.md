@@ -40,6 +40,11 @@ This repo is structured so both Claude Code and Warp can work independently and 
 - Rate limits: Redis-based token buckets; per-ASN and per-account caps
 - Reprocessing: re-enqueue from *_raw; preserve LLM IO for audit
 
+## Backups & Exports
+- Every import run exports a CSV of newly-inserted rows to ./storage/backups/links_inserted_<timestamp>.csv
+- Nightly job ships backups to S3/GCS and retains 30 days locally.
+- Keep lineage via link_provenance (sheet_name, tab, row_number, discovered_at).
+
 ## Observability
 - Tracing: OTel traces across services; propagate trace_id in messages
 - Metrics: queue depth, p95 latencies per step, scrape success %, extraction validity %, primary route success %

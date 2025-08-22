@@ -61,11 +61,18 @@ CREATE TYPE confidence AS ENUM ('low','medium','high');
 ### 1) Ingestion Queue
 ```sql
 CREATE TABLE public.linkedin_links (
- id BIGSERIAL PRIMARY KEY,
+id BIGSERIAL PRIMARY KEY,
  url TEXT NOT NULL,
  url_canonical TEXT GENERATED ALWAYS AS (lower(url)) STORED,
  link_type link_kind DEFAULT 'unknown'::link_kind,
  source source_kind NOT NULL,
+ -- local/ingestor-friendly fields for provenance and categorization
+ category TEXT,                -- posts|jobs|other|external
+ sheet_name TEXT,
+ tab TEXT,
+ row_number INT,
+ date_in_source TEXT,
+ extracted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
  external_metadata JSONB,
  is_scraped BOOLEAN DEFAULT FALSE,
  is_processed BOOLEAN DEFAULT FALSE,
@@ -75,6 +82,8 @@ CREATE TABLE public.linkedin_links (
  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_link_unique ON public.linkedin_links (url_canonical);
+-- Practical ON CONFLICT guidance
+-- INSERT ... ON CONFLICT (url_canonical) DO UPDATE SET ... ensures idempotency for ingest.
 CREATE INDEX IF NOT EXISTS ix_links_status ON public.linkedin_links (is_scraped, is_processed, is_error);
 ```
 
@@ -234,6 +243,7 @@ CREATE TABLE public.errors (
 
 ## Processing Rules
 - Idempotency: linkedin_links.url_canonical unique; scrapers upsert *_raw by link_id; jobs upsert by (source_link_id, role_title, company_id)
+- Categorization: url LIKE 'https://www.linkedin.com/posts%' → posts; LIKE 'https://www.linkedin.com/jobs%' → jobs; LIKE 'https://www.linkedin.com/%' → other; else external
 - Dedupe: md5(url_canonical); job duplicate hash of (company, role_title, location, application_link)
 - Data quality: NOT NULL where possible, regex/url checks, salary sanity ranges
 - Observability: spans across ingest→classify→scrape→extract→route; alert on queue backlog, error spikes, drift

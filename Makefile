@@ -4,8 +4,11 @@
 setup:         ## install toolchains + deps
 	asdf install || true
 	[ -f package.json ] && npm ci || true
-	[ -f pyproject.toml ] && python -m pip install -U pip && pip install -e . || true
+	[ -f requirements.txt ] && python -m pip install -U pip && pip install -r requirements.txt || true
 	pre-commit install || true
+	# Install Playwright browsers (Chromium) if playwright is available
+	python -c "import sys; import importlib; sys.exit(0 if importlib.util.find_spec('playwright') else 1)" \
+		&& python -m playwright install chromium || true
 
 dev:           ## run dev servers
 	[ -f package.json ] && npm run dev || true
@@ -34,6 +37,8 @@ typecheck:
 start:
 	[ -f package.json ] && npm start || true
 	[ -f src/app.py ] && python -m src.app || true
+	# Demo: run Notion scraper on seeds if present
+	[ -f config/notion_seeds.json ] && python -m src.ingestors.notion_scraper --seeds config/notion_seeds.json || true
 
 check: fmt lint typecheck test  ## local gate before commit
 ci: lint typecheck test

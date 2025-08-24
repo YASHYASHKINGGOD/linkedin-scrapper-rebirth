@@ -3,7 +3,7 @@ import os
 import json
 import time
 from typing import List
-from celery import shared_task
+from celery import shared_task, chain
 
 from src.ingest.combined_links_csv import run_combined_csv
 from src.db.import_and_backup import import_and_backup
@@ -40,6 +40,23 @@ def upsert_db(csv_path: str | None = None, minutes: int = 10) -> dict:
     return {"ok": True, "backup_csv": backup}
 
 
+@shared_task(name="src.scheduler_gs.tasks.upsert_db_from_ingest")
+def upsert_db_from_ingest(res_ing: dict) -> dict:
+    """Glue step to feed ingest's result into upsert_db.
+    Accepts the previous task's dict and extracts csv_path.
+    """
+    if not isinstance(res_ing, dict) or not res_ing.get("ok"):
+        return {"ok": False, "stage": "ingest", "error": (res_ing.get("error") if isinstance(res_ing, dict) else "ingest failed"), "result": res_ing}
+    csv_path = res_ing.get("output_csv")
+    return upsert_db.run(csv_path)
+
+
+@shared_task(name="src.scheduler_gs.tasks.classify_queue_step")
+def classify_queue_step(_: dict | None = None) -> dict:
+    """Glue step to ignore prior result and call classification."""
+    return classify_queue.run()
+
+
 @shared_task(name="src.scheduler_gs.tasks.classify_queue")
 def classify_queue() -> dict:
     db_url = os.environ.get("DATABASE_URL", "")
@@ -51,21 +68,11 @@ def classify_queue() -> dict:
 
 @shared_task(name="src.scheduler_gs.tasks.pipeline")
 def pipeline() -> dict:
-    # 1) ingest → CSV
-    res_ing = ingest.apply().get()
-    if not res_ing.get("ok"):
-        return {"ok": False, "stage": "ingest", "error": res_ing.get("error"), "result": res_ing}
-    csv_path = res_ing.get("output_csv")
-
-    # 2) import_and_backup → DB
-    res_db = upsert_db.apply(args=[csv_path]).get()
-    if not res_db.get("ok"):
-        return {"ok": False, "stage": "upsert_db", "error": res_db.get("error"), "result": res_db}
-
-    # 3) classify_and_queue
-    res_cl = classify_queue.apply().get()
-    if not res_cl.get("ok"):
-        return {"ok": False, "stage": "classify_queue", "error": res_cl.get("error"), "result": res_cl}
-
-    return {"ok": True, "ingest": res_ing, "upsert": res_db, "classify": res_cl}
+    """Kick off the pipeline as a Celery chain without blocking inside the task."""
+    async_res = chain(
+        ingest.s(),
+        upsert_db_from_ingest.s(),
+        classify_queue_step.s(),
+    ).apply_async()
+    return {"ok": True, "chain_id": async_res.id}
 

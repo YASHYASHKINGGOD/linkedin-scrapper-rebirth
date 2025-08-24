@@ -17,3 +17,11 @@ storage/
 .secrets/*.json
 *.log
 
+# Celery/Flower runtime state (do not commit)
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+
+# Local config (use the .sample file in repo)
+config/sheets.yaml
+

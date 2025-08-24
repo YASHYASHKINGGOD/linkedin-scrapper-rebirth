@@ -54,4 +54,11 @@ scraper.dev:
 scraper.test:
 	[ -f pytest.ini -o -f pyproject.toml -o -d tests ] && pytest -q -k scraper || true
 
+# Router helpers (use scraper app for beat)
+router.run-once:
+	celery -A src.scraper.celery_app:app call src.router.tasks.route_once
+
+router.beat:
+	celery -A src.scraper.celery_app:app beat --loglevel=info
+
 ci: lint typecheck test

@@ -3,11 +3,27 @@ import os
 import time
 from contextlib import asynccontextmanager
 from typing import Optional
+import random
 
 from playwright.sync_api import sync_playwright
 
 OUT_DIR = os.environ.get("SCRAPER_OUT_DIR", "./storage/scrape")
 HEADLESS_DEFAULT = os.environ.get("SCRAPER_HEADLESS", "true").lower() == "true"
+RATE_QPS = float(os.environ.get("SCRAPER_RATE_QPS", "0.2"))  # ~1 req / 5s by default
+
+_last_req_ts: float = 0.0
+
+
+def _rate_limit_sleep():
+    global _last_req_ts
+    if RATE_QPS <= 0:
+        return
+    min_interval = 1.0 / RATE_QPS
+    now = time.monotonic()
+    elapsed = now - _last_req_ts
+    if elapsed < min_interval:
+        time.sleep(min_interval - elapsed)
+    _last_req_ts = time.monotonic()
 
 
 def ensure_dirs(ts: str) -> tuple[str, str]:
@@ -60,14 +76,29 @@ def scrape_single_job(url: str, headed: bool = False) -> dict:
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
+        # Slightly vary viewport to reduce fingerprints
+        vw = random.randint(1280, 1440)
+        vh = random.randint(800, 950)
         context = browser.new_context(
-            user_agent=os.environ.get("SCRAPER_USER_AGENT", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36"),
-            viewport={"width": 1366, "height": 900},
+            user_agent=os.environ.get(
+                "SCRAPER_USER_AGENT",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119 Safari/537.36",
+            ),
+            viewport={"width": vw, "height": vh},
+            locale="en-US",
+            timezone_id="UTC",
+            extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
         )
         page = context.new_page()
-        page.goto(url, timeout=45000, wait_until="domcontentloaded")
-        # polite delay to allow dynamic content
-        page.wait_for_timeout(2000)
+        # global token-bucket rate limit + small jitter before navigating
+        _rate_limit_sleep()
+        time.sleep(random.uniform(0.8, 1.6))
+        page.goto(url, timeout=60000, wait_until="domcontentloaded")
+        # human-like waiting and scroll
+        page.wait_for_timeout(int(random.uniform(1500, 3000)))
+        for _ in range(random.randint(2, 4)):
+            page.mouse.wheel(0, random.randint(600, 1000))
+            page.wait_for_timeout(int(random.uniform(400, 900)))
 
         # Extract core fields against provided classes/selectors
         role = _txt(page, "h1.top-card-layout__title") or _txt(page, ".sub-nav-cta__header")

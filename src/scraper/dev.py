@@ -44,6 +44,19 @@ def _txt(page, selector: str) -> str:
     return el.inner_text().strip() if el else ""
 
 
+def _first_text(page, selectors: list[str]) -> str:
+    for sel in selectors:
+        try:
+            el = page.query_selector(sel)
+            if el:
+                txt = el.inner_text().strip()
+                if txt:
+                    return txt
+        except Exception:
+            continue
+    return ""
+
+
 def _desc_text(page) -> str:
     # Try the rich description container first
     el = page.query_selector(".description__text .show-more-less-html__markup")
@@ -100,9 +113,40 @@ def scrape_single_job(url: str, headed: bool = False) -> dict:
             page.mouse.wheel(0, random.randint(600, 1000))
             page.wait_for_timeout(int(random.uniform(400, 900)))
 
-        # Extract core fields against provided classes/selectors
-        role = _txt(page, "h1.top-card-layout__title") or _txt(page, ".sub-nav-cta__header")
-        company = _txt(page, "a.topcard__org-name-link") or _txt(page, ".sub-nav-cta__optional-url")
+        # Try to expand description if collapsed
+        try:
+            btn = page.query_selector(".show-more-less-html__button--more")
+            if btn:
+                btn.click()
+                page.wait_for_timeout(500)
+        except Exception:
+            pass
+
+        # Extract core fields against provided classes/selectors with robust fallbacks
+        role = _first_text(page, [
+            "h1.top-card-layout__title",
+            "h1.topcard__title",
+            ".topcard__title",
+            ".sub-nav-cta__header",
+            "section.top-card-layout h1",
+        ])
+        if not role:
+            # fall back to document title heuristic
+            try:
+                t = page.title().strip()
+                # common patterns: "<role> - <Company> - LinkedIn" or "<role> | LinkedIn"
+                for sep in [" - ", " | ", " • "]:
+                    if sep in t:
+                        role = t.split(sep)[0].strip()
+                        break
+            except Exception:
+                pass
+
+        company = _first_text(page, [
+            "a.topcard__org-name-link",
+            ".sub-nav-cta__optional-url",
+            ".top-card-layout__second-subline a",
+        ])
         location = _txt(page, ".topcard__flavor-row .topcard__flavor--bullet") or _txt(page, ".sub-nav-cta__meta-text")
         posted = _txt(page, ".posted-time-ago__text")
         # Job status (e.g., No longer accepting applications)

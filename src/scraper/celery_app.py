@@ -11,6 +11,16 @@ app = Celery(
     backend=CELERY_RESULT_BACKEND,
 )
 
-# Autodiscover scraper tasks when added (src.scraper.tasks)
-app.autodiscover_tasks(["src.scraper"], force=True)
+# Autodiscover scraper and router tasks
+app.autodiscover_tasks(["src.scraper", "src.router"], force=True)
+
+# Beat schedule for router sweep (every minute)
+from celery.schedules import crontab  # type: ignore
+app.conf.beat_schedule = {
+    "router-every-minute": {
+        "task": "src.router.tasks.route_once",
+        "schedule": crontab(minute="*"),
+        "args": [],
+    },
+}
 

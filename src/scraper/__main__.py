@@ -20,6 +20,7 @@ def write_csv(rows: List[dict], path: str) -> str:
         "company_name",
         "location",
         "posted_time",
+        "status",
         "description_text",
         "key_responsibilities",
         "requirements",

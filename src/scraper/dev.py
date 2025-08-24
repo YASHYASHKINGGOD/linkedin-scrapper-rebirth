@@ -74,6 +74,8 @@ def scrape_single_job(url: str, headed: bool = False) -> dict:
         company = _txt(page, "a.topcard__org-name-link") or _txt(page, ".sub-nav-cta__optional-url")
         location = _txt(page, ".topcard__flavor-row .topcard__flavor--bullet") or _txt(page, ".sub-nav-cta__meta-text")
         posted = _txt(page, ".posted-time-ago__text")
+        # Job status (e.g., No longer accepting applications)
+        status = _txt(page, "figure.closed-job .closed-job__flavor--closed")
         desc_text = _desc_text(page)
         key_resp, requirements = _parse_sections(desc_text)
 
@@ -95,6 +97,7 @@ def scrape_single_job(url: str, headed: bool = False) -> dict:
             "description_text": desc_text,
             "key_responsibilities": key_resp,
             "requirements": requirements,
+            "status": status,
             "html_path": html_path,
             "screenshot_path": png_path,
         }

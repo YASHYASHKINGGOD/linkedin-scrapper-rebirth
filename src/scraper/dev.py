@@ -23,6 +23,36 @@ def save_artifacts(html: str, html_path: str, png_path: str) -> None:
         f.write(html)
 
 
+def _txt(page, selector: str) -> str:
+    el = page.query_selector(selector)
+    return el.inner_text().strip() if el else ""
+
+
+def _desc_text(page) -> str:
+    # Try the rich description container first
+    el = page.query_selector(".description__text .show-more-less-html__markup")
+    if not el:
+        el = page.query_selector(".description__text")
+    return el.inner_text().strip() if el else ""
+
+
+def _parse_sections(desc: str) -> tuple[list[str], list[str]]:
+    # Naive split based on headings in provided HTML: "Key Responsibilities:" and "Requirements:"
+    lower = desc
+    resp: list[str] = []
+    reqs: list[str] = []
+    try:
+        if "Key Responsibilities:" in desc and "Requirements:" in desc:
+            a, b = desc.split("Key Responsibilities:", 1)
+            resp_block, rest = b.split("Requirements:", 1)
+            # Split bullet-ish lines
+            resp = [line.strip("•- \t\n").strip() for line in resp_block.splitlines() if line.strip()]
+            reqs = [line.strip("•- \t\n").strip() for line in rest.splitlines() if line.strip()]
+    except Exception:
+        pass
+    return resp, reqs
+
+
 def scrape_single_job(url: str, headed: bool = False) -> dict:
     ts = time.strftime("%Y%m%d")
     html_dir, shot_dir = ensure_dirs(ts)
@@ -38,6 +68,15 @@ def scrape_single_job(url: str, headed: bool = False) -> dict:
         page.goto(url, timeout=45000, wait_until="domcontentloaded")
         # polite delay to allow dynamic content
         page.wait_for_timeout(2000)
+
+        # Extract core fields against provided classes/selectors
+        role = _txt(page, "h1.top-card-layout__title") or _txt(page, ".sub-nav-cta__header")
+        company = _txt(page, "a.topcard__org-name-link") or _txt(page, ".sub-nav-cta__optional-url")
+        location = _txt(page, ".topcard__flavor-row .topcard__flavor--bullet") or _txt(page, ".sub-nav-cta__meta-text")
+        posted = _txt(page, ".posted-time-ago__text")
+        desc_text = _desc_text(page)
+        key_resp, requirements = _parse_sections(desc_text)
+
         html = page.content()
         link_id = int(time.time())  # placeholder until DB wiring; return path only
         html_path = os.path.join(html_dir, f"{link_id}.html")
@@ -46,5 +85,17 @@ def scrape_single_job(url: str, headed: bool = False) -> dict:
         page.screenshot(path=png_path, full_page=True)
         context.close()
         browser.close()
-        return {"ok": True, "url": url, "html_path": html_path, "screenshot_path": png_path}
+        return {
+            "ok": True,
+            "url": url,
+            "role_title": role,
+            "company_name": company,
+            "location": location,
+            "posted_time": posted,
+            "description_text": desc_text,
+            "key_responsibilities": key_resp,
+            "requirements": requirements,
+            "html_path": html_path,
+            "screenshot_path": png_path,
+        }
 

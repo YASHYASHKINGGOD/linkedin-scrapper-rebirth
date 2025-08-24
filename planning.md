@@ -29,6 +29,15 @@ Scope
 Acceptance
 - p95 ingest→job <10m; alerting in place; audit trails complete
 
+## Milestone 4 — Orchestration & Queues
+Scope
+- Introduce queue-backed workers for ingest, classify, route, scrape.job, scrape.post, stage, extract
+- Implement status state machine in linkedin_links and *_raw/*_stage
+- Idempotent upserts via ON CONFLICT (url_canonical)
+- Backoff retries and DLQ
+Acceptance
+- End-to-end new → extracted under back-pressure; dashboards show queue depths and latencies
+
 ## Test Plan
 - Unit: URL validation, classifiers, schema validators, routers
 - Integration: scraper to storage stubs; LLM extraction with mocked models

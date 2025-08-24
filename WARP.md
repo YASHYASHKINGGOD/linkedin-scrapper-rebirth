@@ -63,6 +63,6 @@ Verification checklist (Warp)
 - `make setup` completes without error
 - `make check` passes
 - `make start` boots the minimal services
-- Links in README, WARP, DESIGN, OPERATING_MANUAL resolve
+- Links in README, WARP, DESIGN, OPERATING_MANUAL, orchestration.md resolve
 - Session log created for today under sessions/
 

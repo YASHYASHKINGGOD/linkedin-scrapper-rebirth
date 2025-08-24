@@ -36,4 +36,19 @@ start:
 	[ -f src/app.py ] && python -m src.app || true
 
 check: fmt lint typecheck test  ## local gate before commit
+
+# Celery scheduler app (Google Sheets → DB)
+celery.worker:
+	CELERY_BROKER_URL?=redis://localhost:6379/0 ; \
+	CELERY_RESULT_BACKEND?=redis://localhost:6379/1 ; \
+	celery -A src.scheduler_gs.celery_app:app worker --loglevel=info --concurrency=$${CONCURRENCY:-2}
+
+celery.beat:
+	CELERY_BROKER_URL?=redis://localhost:6379/0 ; \
+	CELERY_RESULT_BACKEND?=redis://localhost:6379/1 ; \
+	celery -A src.scheduler_gs.celery_app:app beat --loglevel=info
+
+scheduler.start:
+	@echo "Start two terminals: make celery.worker and make celery.beat"
+
 ci: lint typecheck test

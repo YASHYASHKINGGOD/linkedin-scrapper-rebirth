@@ -36,4 +36,14 @@ start:
 	[ -f src/app.py ] && python -m src.app || true
 
 check: fmt lint typecheck test  ## local gate before commit
+
+# Posts scraper targets
+posts.dev:
+	[ -z "$(URL)" ] && echo "Usage: make posts.dev URL=..." && exit 2 || true
+	python -m apps.scraper_playwright.src.posts_scraper single --url "$(URL)" --headed
+
+posts.batch:
+	[ -z "$(INPUT)" ] && echo "Usage: make posts.batch INPUT=./links.txt [LIMIT=5]" && exit 2 || true
+	python -m apps.scraper_playwright.src.posts_scraper batch --input "$(INPUT)" --limit $${LIMIT:-5}
+
 ci: lint typecheck test

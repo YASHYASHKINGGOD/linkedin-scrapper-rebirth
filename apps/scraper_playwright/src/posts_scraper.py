@@ -24,14 +24,40 @@ LI_EMAIL = os.getenv("LI_EMAIL", "").strip() or None
 LI_PASSWORD = os.getenv("LI_PASSWORD", "").strip() or None
 
 
+def _is_template_like(s: Optional[str]) -> bool:
+    if not s:
+        return False
+    t = s.strip()
+    return t.startswith("{{") and t.endswith("}}")
+
+
+def _sanitize_secret(s: Optional[str]) -> Optional[str]:
+    if not s:
+        return s
+    t = s.strip()
+    if _is_template_like(t):
+        # Strip surrounding {{ }} commonly used in placeholders
+        t = t[2:-2].strip()
+    return t or None
+
+
 def _load_local_secrets_if_any():
     """Load LI_EMAIL/LI_PASSWORD from a local gitignored secrets file if not in env.
     Supports:
       - .secrets/linkedin.json with keys {"LI_EMAIL": "...", "LI_PASSWORD": "..."}
       - .secrets/linkedin.env with lines LI_EMAIL=... and LI_PASSWORD=...
+    Also sanitizes template-like values like {{value}}.
     """
     global LI_EMAIL, LI_PASSWORD
+    # If env holds template-like placeholders, ignore and try local files
+    if _is_template_like(LI_EMAIL or ""):
+        LI_EMAIL = None
+    if _is_template_like(LI_PASSWORD or ""):
+        LI_PASSWORD = None
     if LI_EMAIL and LI_PASSWORD:
+        # Sanitize before returning
+        LI_EMAIL = _sanitize_secret(LI_EMAIL)
+        LI_PASSWORD = _sanitize_secret(LI_PASSWORD)
         return
     for base in [Path(".secrets"), Path.home() / ".secrets"]:
         try:
@@ -41,6 +67,11 @@ def _load_local_secrets_if_any():
                 LI_EMAIL = LI_EMAIL or data.get("LI_EMAIL")
                 LI_PASSWORD = LI_PASSWORD or data.get("LI_PASSWORD")
                 if LI_EMAIL and LI_PASSWORD:
+                    LI_EMAIL = _sanitize_secret(LI_EMAIL)
+                    LI_PASSWORD = _sanitize_secret(LI_PASSWORD)
+                    return
+L = _sanitize_secret(LI_EMAIL)
+                    LI_PASSWORD = _sanitize_secret(LI_PASSWORD)
                     return
         except Exception:
             pass
@@ -385,7 +416,10 @@ def scrape_one(playwright: Playwright, url: str, headed: bool) -> ScrapeResult:
 
         # Proactive login if creds present, then go to target URL
         if LI_EMAIL and LI_PASSWORD:
-            login_if_needed(page, LI_EMAIL, LI_PASSWORD)
+            # Final sanitize before use
+            email = _sanitize_secret(LI_EMAIL)
+            pwd = _sanitize_secret(LI_PASSWORD)
+            login_if_needed(page, email, pwd)
         page.goto(url, timeout=45000)
         page.wait_for_load_state("domcontentloaded")
         dismiss_modals(page)

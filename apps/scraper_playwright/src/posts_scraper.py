@@ -33,31 +33,34 @@ def _load_local_secrets_if_any():
     global LI_EMAIL, LI_PASSWORD
     if LI_EMAIL and LI_PASSWORD:
         return
-    base = Path(".secrets")
-    try:
-        jpath = base / "linkedin.json"
-        if jpath.exists():
-            data = json.loads(jpath.read_text(encoding="utf-8"))
-            LI_EMAIL = LI_EMAIL or data.get("LI_EMAIL")
-            LI_PASSWORD = LI_PASSWORD or data.get("LI_PASSWORD")
-            return
-    except Exception:
-        pass
-    try:
-        epath = base / "linkedin.env"
-        if epath.exists():
-            for line in epath.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if "=" in line:
-                    k, v = line.split("=", 1)
-                    if k.strip() == "LI_EMAIL" and not LI_EMAIL:
-                        LI_EMAIL = v.strip()
-                    elif k.strip() == "LI_PASSWORD" and not LI_PASSWORD:
-                        LI_PASSWORD = v.strip()
-    except Exception:
-        pass
+    for base in [Path(".secrets"), Path.home() / ".secrets"]:
+        try:
+            jpath = base / "linkedin.json"
+            if jpath.exists():
+                data = json.loads(jpath.read_text(encoding="utf-8"))
+                LI_EMAIL = LI_EMAIL or data.get("LI_EMAIL")
+                LI_PASSWORD = LI_PASSWORD or data.get("LI_PASSWORD")
+                if LI_EMAIL and LI_PASSWORD:
+                    return
+        except Exception:
+            pass
+        try:
+            epath = base / "linkedin.env"
+            if epath.exists():
+                for line in epath.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" in line:
+                        k, v = line.split("=", 1)
+                        if k.strip() == "LI_EMAIL" and not LI_EMAIL:
+                            LI_EMAIL = v.strip()
+                        elif k.strip() == "LI_PASSWORD" and not LI_PASSWORD:
+                            LI_PASSWORD = v.strip()
+                if LI_EMAIL and LI_PASSWORD:
+                    return
+        except Exception:
+            pass
 
 HEADERS_DL = {"Referer": "https://www.linkedin.com", "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"}
 

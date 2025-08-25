@@ -70,9 +70,6 @@ def _load_local_secrets_if_any():
                     LI_EMAIL = _sanitize_secret(LI_EMAIL)
                     LI_PASSWORD = _sanitize_secret(LI_PASSWORD)
                     return
-L = _sanitize_secret(LI_EMAIL)
-                    LI_PASSWORD = _sanitize_secret(LI_PASSWORD)
-                    return
         except Exception:
             pass
         try:

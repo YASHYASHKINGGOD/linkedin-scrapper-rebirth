@@ -104,28 +104,30 @@ def new_context(browser: Browser):
         "timezone_id": tz,
         "viewport": {"width": vp[0], "height": vp[1]},
     }
-    if SESSION_DIR:
-        # Use persistent context when session dir provided
-        # Note: with persistent context we must create it from playwright.chromium.launch_persistent_context
-        pass
     return browser.new_context(**kw)
 
 
 def login_if_needed(page, email: Optional[str], password: Optional[str]) -> None:
     if not email or not password:
         return
-    # If an authwall or sign-in required flow is visible, try logging in
+    # Proactive login flow: go to login page, submit creds, land on feed
     try:
-        if page.locator("text=Sign in").first.is_visible() or page.url.startswith("https://www.linkedin.com/login"):
-            page.goto("https://www.linkedin.com/login", timeout=45000)
+        page.goto("https://www.linkedin.com/login", timeout=45000)
+        rate_sleep()
+        page.fill("input#username", email)
+        rate_sleep()
+        page.fill("input#password", password)
+        rate_sleep()
+        page.click("button[type=submit]")
+        page.wait_for_load_state("networkidle", timeout=45000)
+        rate_sleep((500, 1200))
+        # Optionally touch the feed to cement session
+        try:
+            page.goto("https://www.linkedin.com/feed/", timeout=45000)
+            page.wait_for_load_state("domcontentloaded")
             rate_sleep()
-            page.fill("input#username", email)
-            rate_sleep()
-            page.fill("input#password", password)
-            rate_sleep()
-            page.click("button[type=submit]")
-            page.wait_for_load_state("networkidle", timeout=45000)
-            rate_sleep((500, 1200))
+        except Exception:
+            pass
     except Exception:
         # Best-effort only
         pass
@@ -160,10 +162,10 @@ def dismiss_modals(page):
         pass
 
 
-def expand_post(page):
+def expand_post(node):
     try:
-        # Expand “see more” in post body
-        btns = page.locator("button:has-text('see more'), button:has-text('See more')")
+        # Expand “see more” within a container node (post body or comments)
+        btns = node.locator("button:has-text('see more'), button:has-text('See more')")
         if btns.count() > 0:
             btns.first.click()
             rate_sleep()
@@ -171,11 +173,11 @@ def expand_post(page):
         pass
 
 
-def open_comments_and_collect(page, max_comments: int = 20) -> List[Dict[str, Any]]:
+def open_comments_and_collect(page, post_container, max_comments: int = 20) -> List[Dict[str, Any]]:
     comments: List[Dict[str, Any]] = []
     try:
-        # Open comments if there is a button
-        btn = page.locator("button:has-text('comments'), button:has-text('Comment'), a:has-text('comments')").first
+        # Open comments button within the post container
+        btn = post_container.locator("button:has-text('comments'), button:has-text('Comment'), a:has-text('comments')").first
         if btn.is_visible():
             btn.click()
             page.wait_for_timeout(1000)
@@ -236,7 +238,7 @@ def open_comments_and_collect(page, max_comments: int = 20) -> List[Dict[str, An
     return comments[:max_comments]
 
 
-def extract_post_fields(page) -> Tuple[str, str, str, str, List[str], List[str]]:
+def extract_post_fields(page, post_container) -> Tuple[str, str, str, str, List[str], List[str]]:
     post_url = page.url
     poster_name = ""
     post_text = ""
@@ -244,27 +246,36 @@ def extract_post_fields(page) -> Tuple[str, str, str, str, List[str], List[str]]
     external_urls: List[str] = []
     image_urls: List[str] = []
 
-    # Poster name
+    # Poster name within container
     try:
-        poster_name = page.locator("header a[href*='/in/'], .feed-shared-actor__container a[href*='/in/']").first.inner_text(timeout=5000).strip()
+        poster_name = (
+            post_container.locator("a[href*='/in/']").first.inner_text(timeout=5000).strip()
+            or post_container.locator(".update-components-actor__name").first.inner_text(timeout=5000).strip()
+        )
     except Exception:
         pass
 
-    # Expand body then read
-    expand_post(page)
+    # Expand and read body within container
+    expand_post(post_container)
     try:
-        post_text = page.locator("div[dir='ltr'], span[dir='ltr'], p").first.inner_text(timeout=6000).strip()
+        post_text = (
+            post_container.locator("div.update-components-text span[dir='ltr']").first.inner_text(timeout=6000).strip()
+        )
+    except Exception:
+        # fallback to generic visible text
+        try:
+            post_text = post_container.locator("span[dir='ltr'], div[dir='ltr'], p").first.inner_text(timeout=6000).strip()
+        except Exception:
+            pass
+
+    try:
+        posted_at = post_container.locator("time, span.update-components-actor__sub-description span[aria-hidden='true']").first.inner_text(timeout=4000).strip()
     except Exception:
         pass
 
+    # External URLs only inside the container
     try:
-        posted_at = page.locator("time").first.inner_text(timeout=4000).strip()
-    except Exception:
-        pass
-
-    # External URLs: anchors not linkedin domains
-    try:
-        anchors = page.locator("a").all()
+        anchors = post_container.locator("a").all()
         for a in anchors:
             try:
                 href = a.get_attribute("href") or ""
@@ -281,9 +292,9 @@ def extract_post_fields(page) -> Tuple[str, str, str, str, List[str], List[str]]
         pass
     external_urls = sorted(list({u for u in external_urls}))
 
-    # Images
+    # Images only inside the container
     try:
-        imgs = page.locator("img").all()
+        imgs = post_container.locator("img").all()
         for im in imgs:
             try:
                 src = im.get_attribute("src") or im.get_attribute("data-delayed-url") or ""
@@ -324,7 +335,6 @@ def scrape_one(playwright: Playwright, url: str, headed: bool) -> ScrapeResult:
     t0 = time.time()
     browser = launch(playwright, headed=headed)
 
-    # Persistent session if provided
     context = None
     page = None
     try:
@@ -333,25 +343,37 @@ def scrape_one(playwright: Playwright, url: str, headed: bool) -> ScrapeResult:
         page.set_default_navigation_timeout(45000)
         page.set_default_timeout(8000)
 
-        # Navigate and attempt login/modal handling
+        # Proactive login if creds present, then go to target URL
+        if LI_EMAIL and LI_PASSWORD:
+            login_if_needed(page, LI_EMAIL, LI_PASSWORD)
         page.goto(url, timeout=45000)
         page.wait_for_load_state("domcontentloaded")
         dismiss_modals(page)
         rate_sleep()
-        login_if_needed(page, LI_EMAIL, LI_PASSWORD)
-        dismiss_modals(page)
-        rate_sleep()
 
-        # Heuristic: if content area still obscured, try reloading once
+        # If we still see authwall text, refresh once after login
         try:
-            main_sel = "article, main, div[data-urn*='urn:li:activity']"
-            if not page.locator(main_sel).first.is_visible():
+            if "Sign in" in page.inner_text("body") and (LI_EMAIL and LI_PASSWORD):
                 page.reload()
                 page.wait_for_load_state("domcontentloaded")
                 dismiss_modals(page)
                 rate_sleep()
         except Exception:
             pass
+
+        # Find post container by activity id if possible
+        act = re.search(r"activity-(\d+)", url)
+        post_container = None
+        if act:
+            sel = f"article[data-urn*='{act.group(1)}']"
+            try:
+                post_container = page.locator(sel).first
+                if not post_container or not post_container.is_visible():
+                    post_container = None
+            except Exception:
+                post_container = None
+        if post_container is None:
+            post_container = page.locator("article[data-urn*='urn:li:activity'], article").first
 
         # Scroll to load content and comments
         for _ in range(4):
@@ -361,8 +383,8 @@ def scrape_one(playwright: Playwright, url: str, headed: bool) -> ScrapeResult:
             page.mouse.wheel(0, -random.randint(200, 500))
             rate_sleep()
 
-        post_url, poster_name, post_text, posted_at, external_urls, image_urls = extract_post_fields(page)
-        comments = open_comments_and_collect(page, max_comments=20)
+        post_url, poster_name, post_text, posted_at, external_urls, image_urls = extract_post_fields(page, post_container)
+        comments = open_comments_and_collect(page, post_container, max_comments=20)
 
         # Artifacts
         post_id = normalize_post_id(post_url)
@@ -465,6 +487,9 @@ def main_env_warning():
     # Never echo secrets; only warn if not set and session_dir not provided
     if not SESSION_DIR and not (LI_EMAIL and LI_PASSWORD):
         print("Note: no session_dir or credentials provided. If authwall blocks content, export LI_EMAIL and LI_PASSWORD or set POSTS_SESSION_DIR.")
+    else:
+        # Do not print or log secrets
+        pass
 
 
 if __name__ == "__main__":

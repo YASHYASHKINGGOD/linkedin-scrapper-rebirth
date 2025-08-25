@@ -23,6 +23,42 @@ SESSION_DIR = os.getenv("POSTS_SESSION_DIR", "").strip() or None
 LI_EMAIL = os.getenv("LI_EMAIL", "").strip() or None
 LI_PASSWORD = os.getenv("LI_PASSWORD", "").strip() or None
 
+
+def _load_local_secrets_if_any():
+    """Load LI_EMAIL/LI_PASSWORD from a local gitignored secrets file if not in env.
+    Supports:
+      - .secrets/linkedin.json with keys {"LI_EMAIL": "...", "LI_PASSWORD": "..."}
+      - .secrets/linkedin.env with lines LI_EMAIL=... and LI_PASSWORD=...
+    """
+    global LI_EMAIL, LI_PASSWORD
+    if LI_EMAIL and LI_PASSWORD:
+        return
+    base = Path(".secrets")
+    try:
+        jpath = base / "linkedin.json"
+        if jpath.exists():
+            data = json.loads(jpath.read_text(encoding="utf-8"))
+            LI_EMAIL = LI_EMAIL or data.get("LI_EMAIL")
+            LI_PASSWORD = LI_PASSWORD or data.get("LI_PASSWORD")
+            return
+    except Exception:
+        pass
+    try:
+        epath = base / "linkedin.env"
+        if epath.exists():
+            for line in epath.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    if k.strip() == "LI_EMAIL" and not LI_EMAIL:
+                        LI_EMAIL = v.strip()
+                    elif k.strip() == "LI_PASSWORD" and not LI_PASSWORD:
+                        LI_PASSWORD = v.strip()
+    except Exception:
+        pass
+
 HEADERS_DL = {"Referer": "https://www.linkedin.com", "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"}
 
 UA_POOL = [
@@ -332,6 +368,7 @@ def download_images(image_urls: List[str], dest_dir: Path) -> List[str]:
 
 def scrape_one(playwright: Playwright, url: str, headed: bool) -> ScrapeResult:
     ensure_dirs()
+    _load_local_secrets_if_any()
     t0 = time.time()
     browser = launch(playwright, headed=headed)
 
@@ -485,8 +522,9 @@ def main():
 
 def main_env_warning():
     # Never echo secrets; only warn if not set and session_dir not provided
+    _load_local_secrets_if_any()
     if not SESSION_DIR and not (LI_EMAIL and LI_PASSWORD):
-        print("Note: no session_dir or credentials provided. If authwall blocks content, export LI_EMAIL and LI_PASSWORD or set POSTS_SESSION_DIR.")
+        print("Note: provide credentials via env (LI_EMAIL/LI_PASSWORD) or .secrets/linkedin.(json|env), or set POSTS_SESSION_DIR.")
     else:
         # Do not print or log secrets
         pass

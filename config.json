@@ -1,0 +1,33 @@
+{
+    "linkedin_credentials": {
+        "email": "mojojojosteve@gmail.com",
+        "password": "Mycoffee@1234"
+    },
+    "scraping_settings": {
+        "headless": false,
+        "random_delay_range": [1.0, 2.5],
+        "page_load_timeout": 20,
+        "max_comment_expansion_attempts": 6,
+        "implicit_wait_timeout": 10,
+        "explicit_wait_timeout": 15
+    },
+    "chrome_options": {
+        "disable_automation_flags": [
+            "--disable-blink-features=AutomationControlled",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-extensions",
+            "--disable-plugins",
+            "--disable-images"
+        ],
+        "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "window_size": [1920, 1080]
+    },
+    "output_settings": {
+        "save_to_json": true,
+        "save_to_csv": true,
+        "save_to_excel": true,
+        "output_directory": "outputs",
+        "timestamp_format": "%Y%m%d_%H%M%S"
+    }
+}

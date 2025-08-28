@@ -315,10 +315,27 @@ class LinkedInSeleniumScraper:
         for selector in content_selectors:
             elements = root.find_elements(By.CSS_SELECTOR, selector)
             for el in elements:
-                # Check if this element is inside a comment section
+                # Check if this element is inside a comment section (not main post commentary)
                 try:
-                    parent_comment = el.find_element(By.XPATH, "./ancestor::*[contains(@class, 'comment')]")
-                    if parent_comment:  # Skip if inside a comment
+                    # Be more specific - look for actual comment containers, not just "comment" in class
+                    parent_comment = el.find_element(By.XPATH, "./ancestor::*[contains(@class, 'comment') and not(contains(@class, 'commentary'))]")
+                    # Also check for specific comment container patterns
+                    comment_containers = [
+                        "./ancestor::article[contains(@data-id, 'comment')]",
+                        "./ancestor::*[contains(@class, 'comments-post-meta')]",
+                        "./ancestor::section[contains(@class, 'comment')]"
+                    ]
+                    is_in_comment = False
+                    for xpath in comment_containers:
+                        try:
+                            comment_container = el.find_element(By.XPATH, xpath)
+                            if comment_container:
+                                is_in_comment = True
+                                break
+                        except:
+                            continue
+                    
+                    if parent_comment or is_in_comment:  # Skip if inside a comment
                         continue
                 except NoSuchElementException:
                     pass  # Not inside a comment, continue processing

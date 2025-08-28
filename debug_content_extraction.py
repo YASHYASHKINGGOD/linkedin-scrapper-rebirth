@@ -98,10 +98,27 @@ def test_content_extraction():
             
             for j, el in enumerate(elements, 1):
                 try:
-                    # Check if inside comment
+                    # Check if inside comment with improved logic
                     try:
-                        parent_comment = el.find_element(By.XPATH, "./ancestor::*[contains(@class, 'comment')]")
-                        if parent_comment:
+                        # Be more specific - look for actual comment containers, not just "comment" in class
+                        parent_comment = el.find_element(By.XPATH, "./ancestor::*[contains(@class, 'comment') and not(contains(@class, 'commentary'))]")
+                        # Also check for specific comment container patterns
+                        comment_containers = [
+                            "./ancestor::article[contains(@data-id, 'comment')]",
+                            "./ancestor::*[contains(@class, 'comments-post-meta')]",
+                            "./ancestor::section[contains(@class, 'comment')]"
+                        ]
+                        is_in_comment = False
+                        for xpath in comment_containers:
+                            try:
+                                comment_container = el.find_element(By.XPATH, xpath)
+                                if comment_container:
+                                    is_in_comment = True
+                                    break
+                            except:
+                                continue
+                        
+                        if parent_comment or is_in_comment:
                             print(f"    Element {j}: SKIPPED (inside comment)")
                             continue
                     except:

@@ -1,0 +1,68 @@
+{
+  "batch_summary": {
+    "total_urls": 6,
+    "successful": 6,
+    "failed": 0,
+    "success_rate": "100.0%",
+    "total_comments_extracted": 45,
+    "average_processing_time": "19.80s",
+    "processed_at": "2025-08-28T14:32:51.540188"
+  },
+  "results": [
+    {
+      "url": "https://www.linkedin.com/posts/aarti-sharma-829939101_pharmahiring-productmanager-respiratoryportfolio-activity-7366345375827288065-gTTd?utm_source=share&utm_medium=member_android&rcm=ACoAADcXLXUBKetAmB2PMF4eAa5Y-jNVJ7C9GnQ",
+      "status": "success",
+      "csv_file": "outputs/linkedin_post_20250828_143057.csv",
+      "processing_time": "20.12s",
+      "post_author": "Aarti Sharma",
+      "comment_count": 13,
+      "scraped_at": "2025-08-28T14:30:40.469651"
+    },
+    {
+      "url": "https://www.linkedin.com/posts/ramdev-saharan-213339151_productmanagement-hiring-startupjobs-activity-7366376046297817088-SoZQ?utm_source=share&utm_medium=member_android&rcm=ACoAADcXLXUBKetAmB2PMF4eAa5Y-jNVJ7C9GnQ",
+      "status": "success",
+      "csv_file": "outputs/linkedin_post_20250828_143121.csv",
+      "processing_time": "20.81s",
+      "post_author": "Ramdev Saharan",
+      "comment_count": 15,
+      "scraped_at": "2025-08-28T14:31:04.316308"
+    },
+    {
+      "url": "https://www.linkedin.com/posts/artika-upadhyay-44391915_were-hiring-product-manager-aproduct-activity-7366380148369043457-EpkX?utm_source=share&utm_medium=member_android&rcm=ACoAADcXLXUBKetAmB2PMF4eAa5Y-jNVJ7C9GnQ",
+      "status": "success",
+      "csv_file": "outputs/linkedin_post_20250828_143143.csv",
+      "processing_time": "18.81s",
+      "post_author": "Artika Upadhyay",
+      "comment_count": 0,
+      "scraped_at": "2025-08-28T14:31:28.135698"
+    },
+    {
+      "url": "https://www.linkedin.com/posts/manjusha-m-3b9009181_hiring-productmanagement-apm-activity-7366089082365493249-5MU8?utm_source=share&utm_medium=member_android&rcm=ACoAADcXLXUBKetAmB2PMF4eAa5Y-jNVJ7C9GnQ",
+      "status": "success",
+      "csv_file": "outputs/linkedin_post_20250828_143206.csv",
+      "processing_time": "19.91s",
+      "post_author": "Manjusha M",
+      "comment_count": 7,
+      "scraped_at": "2025-08-28T14:31:49.128756"
+    },
+    {
+      "url": "https://www.linkedin.com/posts/snapeeds_hiring-productmanager-ai-activity-7366370506599526400-ASNZ?utm_source=share&utm_medium=member_android&rcm=ACoAADcXLXUBKetAmB2PMF4eAa5Y-jNVJ7C9GnQ",
+      "status": "success",
+      "csv_file": "outputs/linkedin_post_20250828_143229.csv",
+      "processing_time": "20.11s",
+      "post_author": "Sandeep Srivastava",
+      "comment_count": 10,
+      "scraped_at": "2025-08-28T14:32:12.086245"
+    },
+    {
+      "url": "https://www.linkedin.com/posts/mohana-s-09134b275_retainiq-apply-for-associate-product-manager-activity-7366144939665129474-C4IM?utm_source=share&utm_medium=member_android&rcm=ACoAADcXLXUBKetAmB2PMF4eAa5Y-jNVJ7C9GnQ",
+      "status": "success",
+      "csv_file": "outputs/linkedin_post_20250828_143251.csv",
+      "processing_time": "19.07s",
+      "post_author": "Mohana S",
+      "comment_count": 0,
+      "scraped_at": "2025-08-28T14:32:36.290701"
+    }
+  ],
+  "failed_urls": []
+}

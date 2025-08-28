@@ -5,10 +5,10 @@
     },
     "scraping_settings": {
         "headless": false,
-        "random_delay_range": [1.0, 2.5],
-        "page_load_timeout": 20,
-        "max_comment_expansion_attempts": 6,
-        "implicit_wait_timeout": 10,
+        "random_delay_range": [0.3, 0.8],
+        "page_load_timeout": 30,
+        "max_comment_expansion_attempts": 1,
+        "implicit_wait_timeout": 1,
         "explicit_wait_timeout": 15
     },
     "chrome_options": {

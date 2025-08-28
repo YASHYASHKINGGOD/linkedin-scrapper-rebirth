@@ -9,9 +9,11 @@ import logging
 import random
 import time
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 import os
 from datetime import datetime
+import re
+import csv
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -283,6 +285,572 @@ class LinkedInSeleniumScraper:
             return any(pattern in current_url.lower() for pattern in success_patterns)
         except:
             return False
+    
+    def scrape_post(self, post_url: str) -> Dict[str, Any]:
+        """
+        Scrape a LinkedIn post and extract all relevant information
+        
+        Args:
+            post_url: LinkedIn post URL to scrape
+            
+        Returns:
+            Dictionary containing all extracted post data
+        """
+        if not self.driver:
+            raise ValueError("Driver not initialized")
+        
+        if not self.verify_login_status():
+            raise ValueError("Not logged in")
+        
+        logger.info(f"🔍 Starting to scrape post: {post_url}")
+        
+        try:
+            # Navigate to the post
+            self.driver.get(post_url)
+            self._random_delay(1.0, 2.0)  # Reduced delay
+            
+            # Wait for main content to load - simplified and faster
+            self.wait.until(
+                EC.any_of(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "article")),
+                    EC.presence_of_element_located((By.CSS_SELECTOR, ".main-feed-activity-card")),
+                    EC.presence_of_element_located((By.CSS_SELECTOR, ".feed-shared-update-v2"))
+                )
+            )
+            
+            post_data = {
+                'post_url': post_url,
+                'scraped_at': datetime.now().isoformat(),
+                'scraper_version': '1.0'
+            }
+            
+            # Extract all post components
+            post_data.update(self._extract_post_content())
+            post_data.update(self._extract_post_author())
+            post_data.update(self._extract_post_metadata())
+            post_data['external_links'] = self._extract_external_links()
+            post_data['images'] = self._extract_images()
+            post_data['comments'] = self._extract_comments(limit=10)
+            
+            logger.info(f"✅ Successfully scraped post: {len(post_data.get('comments', []))} comments found")
+            return post_data
+            
+        except Exception as e:
+            logger.error(f"Failed to scrape post {post_url}: {e}")
+            raise
+    
+    def _extract_post_content(self) -> Dict[str, str]:
+        """Extract post text content with expansion handling"""
+        logger.debug("Extracting post content")
+        
+        # Try to expand content first
+        self._expand_post_content()
+        
+        # Multiple selectors for post content - using exact selectors from provided table
+        content_selectors = [
+            # Exact selector from provided table
+            "p.attributed-text-segment-list__content",
+            # Fallback variations
+            ".attributed-text-segment-list__content",
+            "[data-test-id='main-feed-activity-card__commentary'] .attributed-text-segment-list__content"
+        ]
+        
+        post_text = ""
+        for selector in content_selectors:
+            try:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                if elements:
+                    post_text = elements[0].get_attribute('innerText') or elements[0].text
+                    if post_text.strip():
+                        break
+            except Exception as e:
+                logger.debug(f"Selector {selector} failed: {e}")
+                continue
+        
+        return {'post_text': post_text.strip()}
+    
+    def _extract_post_author(self) -> Dict[str, str]:
+        """Extract post author information"""
+        logger.debug("Extracting post author info")
+        
+        author_info = {
+            'post_author': '',
+            'author_title': '',
+            'author_profile_url': ''
+        }
+        
+        # Search for author elements using multiple patterns
+        
+        # Author name selectors - using exact selector from provided table
+        author_selectors = [
+            # Exact selector from provided table
+            "a[data-tracking-control-name='public_post_feed-actor-name']",
+            # Fallback to generic patterns
+            "a[href*='/in/']",
+            "*[class*='entity-lockup'] a",
+            "*[class*='actor'] a", 
+            "header a",
+            "article a"
+        ]
+        
+        for selector in author_selectors:
+            try:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                if elements:
+                    element = elements[0]
+                    author_text = element.text.strip()
+                    if author_text:  # Only set if we actually got text
+                        # Clean up the author text - take first meaningful line
+                        cleaned_text = author_text.split('\n')[0].strip()
+                        # Remove common LinkedIn suffixes
+                        cleaned_text = re.sub(r'\s*•.*$', '', cleaned_text)  # Remove • and everything after
+                        cleaned_text = re.sub(r'\s*\d+(st|nd|rd|th)\+?$', '', cleaned_text)  # Remove 1st+, 2nd+, etc.
+                        
+                        if cleaned_text and len(cleaned_text) > 2:  # Make sure we have a real name
+                            author_info['post_author'] = cleaned_text
+                        
+                        # Try to get profile URL if it's a link
+                        if element.tag_name == 'a':
+                            href = element.get_attribute('href')
+                            if href:
+                                author_info['author_profile_url'] = href
+                        break
+            except Exception as e:
+                logger.debug(f"Author selector {selector} failed: {e}")
+                continue
+        
+        # Author title/description selectors - using exact selector from provided table
+        title_selectors = [
+            # Exact selector from provided table
+            "p.text-color-text-low-emphasis",
+            # Fallback to other selectors
+            "[data-test-id='main-feed-activity-card__entity-lockup'] p",
+            ".base-main-feed-card__entity-lockup p",
+            ".feed-shared-actor__description",
+            ".feed-shared-actor__sub-description"
+        ]
+        
+        for selector in title_selectors:
+            try:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                if elements:
+                    # Get the first line which is usually the title
+                    title_text = elements[0].text.strip()
+                    # Split by line and take first line (title)
+                    if title_text:
+                        first_line = title_text.split('\n')[0].strip()
+                        if first_line and not any(word in first_line.lower() for word in ['ago', 'edited', 'hour', 'day', 'week', 'month']):
+                            author_info['author_title'] = first_line
+                            break
+            except Exception as e:
+                logger.debug(f"Title selector {selector} failed: {e}")
+                continue
+        
+        return author_info
+    
+    def _extract_post_metadata(self) -> Dict[str, str]:
+        """Extract post date and metadata"""
+        logger.debug("Extracting post metadata")
+        
+        metadata = {'date_posted': ''}
+        
+        # Time selectors - using exact selector from provided table
+        time_selectors = [
+            # Exact selector from provided table
+            "time",
+            # Additional specific time selectors
+            "time[datetime]",
+            ".text-xs.text-color-text-low-emphasis.comment__duration-since time",
+            "time.flex-none",
+            "span.text-xs time",
+            "[data-test-id='main-feed-activity-card__entity-lockup'] time",
+            ".base-main-feed-card__entity-lockup time"
+        ]
+        
+        for selector in time_selectors:
+            try:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                if elements:
+                    element = elements[0]
+                    
+                    # Try to get datetime attribute first
+                    datetime_attr = element.get_attribute('datetime')
+                    if datetime_attr:
+                        metadata['date_posted'] = datetime_attr
+                        break
+                    
+                    # Fallback to text content
+                    time_text = element.text.strip()
+                    if time_text and ('y' in time_text or 'ago' in time_text or 'h' in time_text or 'd' in time_text):
+                        metadata['date_posted'] = time_text
+                        break
+                        
+            except Exception as e:
+                logger.debug(f"Time selector {selector} failed: {e}")
+                continue
+        
+        return metadata
+    
+    def _extract_external_links(self) -> List[str]:
+        """Extract external links from post content"""
+        logger.debug("Extracting external links")
+        
+        external_links = []
+        
+        try:
+            # Find all links in the post content area - using exact selector from provided table
+            link_selectors = [
+                # Exact selector from provided table
+                "p.attributed-text-segment-list__content a.link",
+                # Fallback selectors
+                ".feed-shared-update-v2 a[href]",
+                ".feed-shared-text a[href]",
+                ".feed-shared-article a[href]"
+            ]
+            
+            for selector in link_selectors:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                for element in elements:
+                    href = element.get_attribute('href')
+                    if href and not href.startswith('https://www.linkedin.com'):
+                        # Clean up tracking parameters
+                        clean_href = href.split('?')[0] if '?' in href else href
+                        if clean_href not in external_links:
+                            external_links.append(clean_href)
+        
+        except Exception as e:
+            logger.debug(f"Failed to extract external links: {e}")
+        
+        return external_links
+    
+    def _extract_images(self) -> List[Dict[str, str]]:
+        """Extract image information from the post"""
+        logger.debug("Extracting images")
+        
+        images = []
+        
+        try:
+            # Image selectors - using exact selector from provided table
+            image_selectors = [
+                # Exact selector from provided table
+                "ul[data-test-id='feed-images-content'] img",
+                # Fallback selectors
+                ".feed-shared-image img",
+                ".feed-shared-article__image img",
+                ".feed-shared-update-v2 img[src]",
+                "img[alt*='image']"
+            ]
+            
+            for selector in image_selectors:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                for element in elements:
+                    src = element.get_attribute('src')
+                    alt = element.get_attribute('alt') or ''
+                    
+                    if src and 'linkedin.com' in src:
+                        image_info = {
+                            'url': src,
+                            'alt_text': alt
+                        }
+                        
+                        # Avoid duplicates
+                        if not any(img['url'] == src for img in images):
+                            images.append(image_info)
+        
+        except Exception as e:
+            logger.debug(f"Failed to extract images: {e}")
+        
+        return images
+    
+    def _extract_comments(self, limit: int = 10) -> List[Dict[str, str]]:
+        """Extract comments from the post"""
+        logger.debug(f"Extracting top {limit} comments")
+        
+        comments = []
+        
+        try:
+            # Expand comments section if needed
+            self._expand_comments_section()
+            
+            # Comment selectors - updated for new LinkedIn structure
+            comment_selectors = [
+                # New LinkedIn structure from provided HTML
+                "section.comment",
+                ".comment.flex.grow-1.items-stretch",
+                # Fallback to old selectors for compatibility
+                ".comments-comment-item",
+                ".comment-item",
+                "[data-id*='comment']"
+            ]
+            
+            comment_elements = []
+            for selector in comment_selectors:
+                elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                if elements:
+                    comment_elements = elements
+                    break
+            
+            # Extract data from comment elements
+            for i, comment_element in enumerate(comment_elements[:limit]):
+                try:
+                    comment_data = self._extract_single_comment(comment_element)
+                    if comment_data['comment_text'].strip():
+                        comments.append(comment_data)
+                        
+                except Exception as e:
+                    logger.debug(f"Failed to extract comment {i}: {e}")
+                    continue
+        
+        except Exception as e:
+            logger.debug(f"Failed to extract comments: {e}")
+        
+        logger.info(f"Extracted {len(comments)} comments")
+        return comments
+    
+    def _extract_single_comment(self, comment_element) -> Dict[str, str]:
+        """Extract data from a single comment element"""
+        comment_data = {
+            'commentor': '',
+            'comment_text': ''
+        }
+        
+        try:
+            # Extract commenter name - using exact selector from provided table
+            author_selectors = [
+                # Exact selector from provided table
+                "a.comment__author",
+                # Fallback selectors
+                "a.text-sm.link-styled.no-underline.leading-open.comment__author.truncate.pr-6",
+                "a[data-tracking-control-name='public_post_comment_actor-name']",
+                "a[data-tracking-control-name*='comment_actor-name']",
+                ".comments-post-meta__actor-name",
+                ".comment-author-name"
+            ]
+            
+            for selector in author_selectors:
+                author_elements = comment_element.find_elements(By.CSS_SELECTOR, selector)
+                if author_elements:
+                    comment_data['commentor'] = author_elements[0].text.strip()
+                    break
+            
+            # Extract comment text - using exact selector from provided table
+            text_selectors = [
+                # Exact selector from provided table
+                "p.comment__text",
+                # Fallback selectors
+                ".comment__text .attributed-text-segment-list__content",
+                ".comment__body .attributed-text-segment-list__content",
+                ".comments-comment-textual-entity",
+                ".comment-text",
+                ".comments-comment-item__main-content span[dir='ltr']"
+            ]
+            
+            for selector in text_selectors:
+                text_elements = comment_element.find_elements(By.CSS_SELECTOR, selector)
+                if text_elements:
+                    comment_data['comment_text'] = text_elements[0].text.strip()
+                    break
+        
+        except Exception as e:
+            logger.debug(f"Failed to extract single comment data: {e}")
+        
+        return comment_data
+    
+    def _expand_post_content(self):
+        """Expand truncated post content by clicking 'Show more' buttons - optimized for speed"""
+        try:
+            # Quick expansion - try only the most common selectors
+            show_more_selectors = [
+                "button[aria-label*='more']",
+                ".feed-shared-inline-show-more-text button"
+            ]
+            
+            for selector in show_more_selectors:
+                try:
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    if elements and elements[0].is_displayed():
+                        elements[0].click()
+                        time.sleep(0.5)  # Fixed short delay instead of random
+                        logger.debug("Expanded post content")
+                        return
+                except Exception:
+                    continue
+                    
+        except Exception as e:
+            logger.debug(f"Failed to expand post content: {e}")
+    
+    def _expand_comments_section(self):
+        """Expand comments section and load more comments if needed - optimized for speed"""
+        try:
+            # Quick scroll to comments area
+            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight * 0.3);")
+            time.sleep(0.3)  # Very short fixed delay
+            
+            # Try to expand comments - only most common selector
+            more_comments_selectors = [
+                "button[aria-label*='more comments']",
+                "a[data-test-id*='see-more-comments']"
+            ]
+            
+            # Only try first selector for speed
+            for selector in more_comments_selectors:
+                try:
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    if elements and elements[0].is_displayed():
+                        elements[0].click()
+                        time.sleep(0.8)  # Fixed short delay
+                        logger.debug("Expanded comments section")
+                        break
+                except Exception:
+                    continue
+                
+        except Exception as e:
+            logger.debug(f"Failed to expand comments: {e}")
+    
+    def save_post_data(self, post_data: Dict[str, Any], filename: str = None) -> str:
+        """
+        Save scraped post data to JSON file
+        
+        Args:
+            post_data: The scraped post data dictionary
+            filename: Optional custom filename
+            
+        Returns:
+            Path to the saved file
+        """
+        if not filename:
+            timestamp = datetime.now().strftime(self.config['output_settings']['timestamp_format'])
+            filename = f"linkedin_post_{timestamp}.json"
+        
+        filepath = self.output_dir / filename
+        
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(post_data, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"✅ Post data saved to: {filepath}")
+            return str(filepath)
+            
+        except Exception as e:
+            logger.error(f"Failed to save post data: {e}")
+            raise
+    
+    def save_post_data_csv(self, post_data: Dict[str, Any], filename: str = None, single_file: bool = False) -> Tuple[str, str]:
+        """
+        Save scraped post data to CSV files (separate files for post and comments, or single file with comments as JSON)
+        
+        Args:
+            post_data: The scraped post data dictionary
+            filename: Optional custom filename prefix
+            single_file: If True, save all data in a single CSV with comments as JSON column
+            
+        Returns:
+            Tuple of (post_csv_path, comments_csv_path) or (single_csv_path, single_csv_path)
+        """
+        if not filename:
+            timestamp = datetime.now().strftime(self.config['output_settings']['timestamp_format'])
+            filename_prefix = f"linkedin_post_{timestamp}"
+        else:
+            filename_prefix = filename.replace('.csv', '')
+        
+        try:
+            if single_file:
+                # Save everything in a single CSV file with comments as JSON
+                single_csv_path = self.output_dir / f"{filename_prefix}.csv"
+                self._save_single_csv(post_data, single_csv_path)
+                logger.info(f"✅ Post data saved to single CSV: {single_csv_path}")
+                return str(single_csv_path), str(single_csv_path)
+            else:
+                # Save separate files for post and comments
+                post_csv_path = self.output_dir / f"{filename_prefix}_post.csv"
+                comments_csv_path = self.output_dir / f"{filename_prefix}_comments.csv"
+                
+                # Save main post data
+                self._save_post_csv(post_data, post_csv_path)
+                
+                # Save comments data
+                self._save_comments_csv(post_data.get('comments', []), comments_csv_path, post_data)
+                
+                logger.info(f"✅ Post data saved to CSV: {post_csv_path} and {comments_csv_path}")
+                return str(post_csv_path), str(comments_csv_path)
+                
+        except Exception as e:
+            logger.error(f"Failed to save post data to CSV: {e}")
+            raise
+    
+    def _save_post_csv(self, post_data: Dict[str, Any], filepath: Path):
+        """Save main post data to CSV file"""
+        post_row = {
+            'post_url': post_data.get('post_url', ''),
+            'post_author': post_data.get('post_author', ''),
+            'author_title': post_data.get('author_title', ''),
+            'author_profile_url': post_data.get('author_profile_url', ''),
+            'date_posted': post_data.get('date_posted', ''),
+            'post_text': post_data.get('post_text', ''),
+            'external_links': '; '.join(post_data.get('external_links', [])),
+            'image_count': len(post_data.get('images', [])),
+            'image_urls': '; '.join([img.get('url', '') for img in post_data.get('images', [])]),
+            'comment_count': len(post_data.get('comments', [])),
+            'scraped_at': post_data.get('scraped_at', ''),
+            'scraper_version': post_data.get('scraper_version', '')
+        }
+        
+        with open(filepath, 'w', newline='', encoding='utf-8') as f:
+            fieldnames = list(post_row.keys())
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerow(post_row)
+    
+    def _save_comments_csv(self, comments: List[Dict[str, str]], filepath: Path, post_data: Dict[str, Any]):
+        """Save comments data to CSV file"""
+        if not comments:
+            # Create empty CSV with headers if no comments
+            with open(filepath, 'w', newline='', encoding='utf-8') as f:
+                fieldnames = ['post_url', 'post_author', 'commentor', 'comment_text']
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+            return
+        
+        with open(filepath, 'w', newline='', encoding='utf-8') as f:
+            fieldnames = ['post_url', 'post_author', 'commentor', 'comment_text']
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            
+            for comment in comments:
+                comment_row = {
+                    'post_url': post_data.get('post_url', ''),
+                    'post_author': post_data.get('post_author', ''),
+                    'commentor': comment.get('commentor', ''),
+                    'comment_text': comment.get('comment_text', '')
+                }
+                writer.writerow(comment_row)
+    
+    def _save_single_csv(self, post_data: Dict[str, Any], filepath: Path):
+        """Save all post data to a single CSV file with comments as JSON column"""
+        # Convert comments to JSON string
+        comments_json = json.dumps(post_data.get('comments', []), ensure_ascii=False)
+        
+        post_row = {
+            'post_url': post_data.get('post_url', ''),
+            'post_author': post_data.get('post_author', ''),
+            'author_title': post_data.get('author_title', ''),
+            'author_profile_url': post_data.get('author_profile_url', ''),
+            'date_posted': post_data.get('date_posted', ''),
+            'post_text': post_data.get('post_text', ''),
+            'external_links': '; '.join(post_data.get('external_links', [])),
+            'image_count': len(post_data.get('images', [])),
+            'image_urls': '; '.join([img.get('url', '') for img in post_data.get('images', [])]),
+            'comment_count': len(post_data.get('comments', [])),
+            'comments_json': comments_json,  # Comments as JSON string
+            'scraped_at': post_data.get('scraped_at', ''),
+            'scraper_version': post_data.get('scraper_version', '')
+        }
+        
+        with open(filepath, 'w', newline='', encoding='utf-8') as f:
+            fieldnames = list(post_row.keys())
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerow(post_row)
     
     def close_driver(self):
         """Close the Chrome driver"""

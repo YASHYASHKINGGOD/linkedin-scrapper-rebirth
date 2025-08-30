@@ -9,7 +9,13 @@
         "page_load_timeout": 30,
         "max_comment_expansion_attempts": 1,
         "implicit_wait_timeout": 1,
-        "explicit_wait_timeout": 15
+        "explicit_wait_timeout": 15,
+        "login_strategy": "manual",
+        "session_persistence": true,
+        "human_typing_simulation": true,
+        "mouse_movement_simulation": false,
+        "login_delay_range": [1.5, 3.0],
+        "typing_delay_range": [0.05, 0.15]
     },
     "chrome_options": {
         "disable_automation_flags": [
@@ -18,10 +24,22 @@
             "--disable-dev-shm-usage",
             "--disable-extensions",
             "--disable-plugins",
-            "--disable-images"
+            "--disable-images",
+            "--disable-gpu",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-default-apps",
+            "--disable-popup-blocking",
+            "--disable-translate",
+            "--disable-background-timer-throttling",
+            "--disable-renderer-backgrounding",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-ipc-flooding-protection"
         ],
         "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "window_size": [1920, 1080]
+        "window_size": [1920, 1080],
+        "user_data_dir": "chrome_profile",
+        "profile_directory": "Default"
     },
     "output_settings": {
         "save_to_json": true,

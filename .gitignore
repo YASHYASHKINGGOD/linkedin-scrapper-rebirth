@@ -17,3 +17,6 @@ storage/
 .secrets/*.json
 *.log
 
+# Browser profiles (should not be tracked)
+chrome_profile/
+

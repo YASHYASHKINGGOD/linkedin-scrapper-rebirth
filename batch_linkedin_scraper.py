@@ -863,9 +863,11 @@ def main():
     
     # URLs to scrape - User provided LinkedIn posts
     urls = [
-        "https://www.linkedin.com/posts/dipti-pandey-9a24a022a_hiring-productmanager-fintechjobs-activity-7365994755303854080-G80a?utm_source=share&utm_medium=member_android&rcm=ACoAADcXLXUBKetAmB2PMF4eAa5Y-jNVJ7C9GnQ",
-        "https://www.linkedin.com/posts/aaliya-baxamusa-01641a138_hiring-techjobs-productjobs-activity-7366002358796890112-qgAw?utm_source=share&utm_medium=member_android&rcm=ACoAADcXLXUBKetAmB2PMF4eAa5Y-jNVJ7C9GnQ",
-        "https://www.linkedin.com/posts/activity-7365981559994187777-tUdn?utm_source=share&utm_medium=member_android&rcm=ACoAADcXLXUBKetAmB2PMF4eAa5Y-jNVJ7C9GnQ"
+        "https://www.linkedin.com/posts/deepika-talwar-452483259_were-hiring-product-manager-location-activity-7367157058871152641-B8D3?utm_source=share&utm_medium=member_android&rcm=ACoAADcXLXUBKetAmB2PMF4eAa5Y-jNVJ7C9GnQ",
+        "https://www.linkedin.com/posts/abhimanyu-shrimal-a41899135_producthiring-productoperations-projectcoordination-activity-7367435074356555776-N2nH?utm_source=share&utm_medium=member_android&rcm=ACoAADcXLXUBKetAmB2PMF4eAa5Y-jNVJ7C9GnQ",
+        "https://www.linkedin.com/posts/manupriya-goyal-2738ba328_productops-sql-excel-activity-7367155568773378048-2X79?utm_source=share&utm_medium=member_android&rcm=ACoAADcXLXUBKetAmB2PMF4eAa5Y-jNVJ7C9GnQ",
+        "https://www.linkedin.com/posts/shivaninath_product-manager-ugcPost-7367159641132122113-mk0m?utm_source=share&utm_medium=member_android&rcm=ACoAADcXLXUBKetAmB2PMF4eAa5Y-jNVJ7C9GnQ",
+        "https://www.linkedin.com/posts/neelesh-soni_we-are-hiring-a-product-manager-at-tectonic-activity-7367503917041004544-oqb1?utm_source=share&utm_medium=member_android&rcm=ACoAADcXLXUBKetAmB2PMF4eAa5Y-jNVJ7C9GnQ"
     ]
     
     logger.info(f"🚀 Starting batch LinkedIn scraper for {len(urls)} posts")

@@ -85,14 +85,13 @@ class LinkedInPostsRouter:
     
     async def apply_migration(self) -> None:
         """Apply the linkedin_posts_raw table migration"""
-        migration_path = Path(__file__).parent.parent / "db" / "migrations" / "001_create_linkedin_posts_raw.sql"
+        from src.db.migrations.create_posts_table import create_linkedin_posts_raw_table
         
-        with psycopg.connect(self.database_url) as conn:
-            conn.execute("SET TIME ZONE 'UTC'")
-            with conn.transaction():
-                with open(migration_path, 'r') as f:
-                    conn.execute(f.read())
-                print("✅ Applied linkedin_posts_raw table migration")
+        try:
+            create_linkedin_posts_raw_table(self.database_url)
+        except Exception as e:
+            print(f"❌ Migration failed: {e}")
+            raise
     
     async def get_queued_post_links(self, limit: int = None) -> List[Dict[str, Any]]:
         """

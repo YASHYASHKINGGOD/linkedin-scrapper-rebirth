@@ -259,11 +259,10 @@ async def main():
             await worker.run_continuous_worker()
         
         elif args.command == "migrate-database":
-            from src.routers.posts_router import LinkedInPostsRouter
+            from src.db.migrations.create_posts_table import create_linkedin_posts_raw_table
             
-            router = LinkedInPostsRouter(database_url, args.storage)
-            await router.apply_migration()
-            
+            print(f"🔄 Running database migration...")
+            create_linkedin_posts_raw_table(database_url)
             print("✅ Database migration completed")
         
         elif args.command in ["queue-status", "scraping-stats"]:

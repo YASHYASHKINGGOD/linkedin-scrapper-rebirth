@@ -28,7 +28,13 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.routers.posts_router import LinkedInPostsRouter, ScrapingResult
-from apps.scraper_playwright.posts.scraper import LinkedInPostScraper, ScrapedPost
+from async_database_scraper import AsyncDatabaseLinkedInScraper
+
+try:
+    import psycopg
+except ImportError:
+    print("❌ psycopg is required. Install with: pip install 'psycopg[binary]'")
+    psycopg = None
 
 
 class LinkedInPostsWorker:
@@ -39,16 +45,17 @@ class LinkedInPostsWorker:
         database_url: str, 
         storage_base: str = "./storage",
         headless: bool = True,
-        concurrent_scrapers: int = 2
+        concurrent_scrapers: int = 2,
+        config_path: str = "config.json"
     ):
         self.database_url = database_url
         self.storage_base = storage_base
         self.headless = headless
         self.concurrent_scrapers = concurrent_scrapers
+        self.config_path = config_path
         
-        # Initialize router and scraper
+        # Initialize router
         self.router = LinkedInPostsRouter(database_url, storage_base)
-        self.scraper = LinkedInPostScraper(storage_base, headless)
         
         # Worker configuration
         self.batch_size = 5
@@ -61,41 +68,17 @@ class LinkedInPostsWorker:
         print(f"   🕷️  Concurrent scrapers: {concurrent_scrapers}")
         print(f"   👁️  Headless mode: {headless}")
     
-    def _convert_scraped_to_scraping_result(self, scraped: ScrapedPost) -> ScrapingResult:
-        """Convert ScrapedPost to ScrapingResult for database persistence"""
-        scrape_metadata = {
-            "scrape_timestamp": scraped.scrape_timestamp,
-            "html_length": scraped.html_length,
-            "screenshot_taken": scraped.screenshot_taken,
-            "canonical_url": scraped.canonical_url,
-            "error_type": scraped.error_type
-        }
+    async def _get_scraper(self) -> AsyncDatabaseLinkedInScraper:
+        """Get a scraper instance (reuse to maintain login state)"""
+        if not hasattr(self, '_scraper') or self._scraper is None:
+            self._scraper = AsyncDatabaseLinkedInScraper(
+                database_url=self.database_url,
+                config_path=self.config_path,
+                storage_base=self.storage_base
+            )
+            await self._scraper.initialize()
         
-        extracted_data = {}
-        if scraped.author_name:
-            extracted_data["author_name"] = scraped.author_name
-        if scraped.author_profile_url:
-            extracted_data["author_profile_url"] = scraped.author_profile_url
-        if scraped.post_text:
-            extracted_data["post_text"] = scraped.post_text
-        if scraped.post_date:
-            extracted_data["post_date"] = scraped.post_date
-        if scraped.like_count is not None:
-            extracted_data["like_count"] = scraped.like_count
-        if scraped.comment_count is not None:
-            extracted_data["comment_count"] = scraped.comment_count
-        if scraped.repost_count is not None:
-            extracted_data["repost_count"] = scraped.repost_count
-        
-        return ScrapingResult(
-            success=scraped.success,
-            raw_html_path=scraped.raw_html_path,
-            screenshot_path=scraped.screenshot_path,
-            metadata_json_path=scraped.metadata_json_path,
-            scrape_metadata=scrape_metadata,
-            extracted_data=extracted_data,
-            error_message=scraped.error_message
-        )
+        return self._scraper
     
     async def scrape_single_post(
         self, 
@@ -115,25 +98,27 @@ class LinkedInPostsWorker:
         trace_id = str(uuid.uuid4())[:8]
         print(f"🕷️  [trace:{trace_id}] Scraping single post: {url}")
         
+        scraper = None
         try:
-            # Run scraper
-            scraped = await self.scraper.scrape_post(url, link_id, trace_id)
+            # Get scraper instance
+            scraper = await self._get_scraper()
             
-            # Convert to result format
-            result = self._convert_scraped_to_scraping_result(scraped)
+            # For single post scraping, we need a link_id or create a dummy one
+            if link_id is None:
+                # Create a temporary entry in the database for testing
+                with psycopg.connect(self.database_url) as conn:
+                    link_id = conn.execute(
+                        "INSERT INTO linkedin_links (url, classification, status) VALUES (%s, 'post', 'scraping') RETURNING id",
+                        [url]
+                    ).fetchone()[0]
+                    print(f"   📝 Created temporary link_id={link_id}")
             
-            print(f"   {'✅' if result.success else '❌'} [trace:{trace_id}] Scraping {'completed' if result.success else 'failed'}")
+            # Run scraper - it handles database updates internally
+            result = await scraper.scrape_post(url, link_id, trace_id)
             
-            return {
-                "trace_id": trace_id,
-                "success": result.success,
-                "url": url,
-                "link_id": link_id,
-                "error_message": result.error_message,
-                "raw_html_path": result.raw_html_path,
-                "screenshot_path": result.screenshot_path,
-                "extracted_data": result.extracted_data
-            }
+            print(f"   {'✅' if result['success'] else '❌'} [trace:{trace_id}] Scraping {'completed' if result['success'] else 'failed'}")
+            
+            return result
             
         except Exception as e:
             print(f"   ❌ [trace:{trace_id}] Worker error: {e}")
@@ -147,6 +132,32 @@ class LinkedInPostsWorker:
                 "screenshot_path": None,
                 "extracted_data": {}
             }
+        finally:
+            # Don't close scraper here to allow reuse
+            pass
+    
+    def _convert_scraped_to_scraping_result(self, scraped: Dict[str, Any]) -> ScrapingResult:
+        """
+        Convert selenium scraper result to ScrapingResult format expected by router
+        
+        Args:
+            scraped: Result from AsyncDatabaseLinkedInScraper.scrape_post()
+            
+        Returns:
+            ScrapingResult object
+        """
+        return ScrapingResult(
+            success=scraped.get('success', False),
+            url=scraped.get('url', ''),
+            error_message=scraped.get('error_message'),
+            raw_html_path=scraped.get('raw_html_path'),
+            screenshot_path=scraped.get('screenshot_path'),
+            metadata={
+                'trace_id': scraped.get('trace_id'),
+                'link_id': scraped.get('link_id'),
+                'extracted_data': scraped.get('extracted_data', {})
+            }
+        )
     
     async def process_batch(self, batch_size: int = None) -> Dict[str, Any]:
         """
@@ -199,8 +210,11 @@ class LinkedInPostsWorker:
                     try:
                         print(f"   🕷️  [trace:{link_trace_id}] Scraping link_id={link_id}")
                         
+                        # Get scraper instance
+                        scraper = await self._get_scraper()
+                        
                         # Run scraper
-                        scraped = await self.scraper.scrape_post(url, link_id, link_trace_id)
+                        scraped = await scraper.scrape_post(url, link_id, link_trace_id)
                         
                         # Convert result
                         result = self._convert_scraped_to_scraping_result(scraped)

@@ -108,21 +108,14 @@ class LinkedInPostsRouter:
             ll.url,
             ll.status as link_status,
             ll.classification,
-            COALESCE(lpr.id, 0) as raw_id,
-            COALESCE(lpr.status, 'not_created') as raw_status,
-            COALESCE(lpr.attempt_count, 0) as attempt_count,
-            COALESCE(lpr.max_attempts, 3) as max_attempts,
-            lpr.next_retry_at,
-            lpr.error_message,
-            lpr.trace_id
+            lpr.id as raw_id,
+            lpr.success as raw_status,
+            ll.created_at
         FROM public.linkedin_links ll
         LEFT JOIN public.linkedin_posts_raw lpr ON ll.id = lpr.link_id
         WHERE ll.classification = 'post' 
-          AND ll.status = 'queued'
-          AND (lpr.status IS NULL 
-               OR lpr.status IN ('pending', 'retry')
-               OR (lpr.status = 'retry' AND lpr.next_retry_at <= now()))
-          AND (lpr.attempt_count IS NULL OR lpr.attempt_count < lpr.max_attempts)
+          AND (ll.status = 'queued' OR ll.status = 'pending')
+          AND (lpr.id IS NULL OR lpr.success = false)
         ORDER BY ll.id ASC
         {limit_clause}
         """
@@ -146,17 +139,12 @@ class LinkedInPostsRouter:
                 # Try to insert, on conflict update
                 result = conn.execute("""
                     INSERT INTO public.linkedin_posts_raw 
-                        (link_id, url, status, trace_id, created_at, updated_at)
-                    VALUES (%s, %s, 'pending', %s, now(), now())
+                        (link_id, trace_id, url, success)
+                    VALUES (%s, %s, %s, false)
                     ON CONFLICT (link_id) DO UPDATE SET
-                        status = CASE 
-                            WHEN linkedin_posts_raw.status = 'failed' THEN 'retry'
-                            ELSE linkedin_posts_raw.status
-                        END,
-                        trace_id = EXCLUDED.trace_id,
-                        updated_at = now()
+                        trace_id = EXCLUDED.trace_id
                     RETURNING id
-                """, [link_id, url, trace_id]).fetchone()
+                """, [link_id, trace_id, url]).fetchone()
                 
                 return result[0]
     
@@ -166,7 +154,7 @@ class LinkedInPostsRouter:
             conn.execute("SET TIME ZONE 'UTC'")
             conn.execute("""
                 UPDATE public.linkedin_links 
-                SET status = %s, next_attempt_at = now(), updated_at = now()
+                SET status = %s
                 WHERE id = %s
             """, [status, link_id])
     
@@ -179,61 +167,31 @@ class LinkedInPostsRouter:
     ) -> None:
         """Update scraping status and results in linkedin_posts_raw table"""
         
-        now = datetime.now(timezone.utc)
-        
-        update_fields = {
-            'status': status,
-            'updated_at': now
-        }
-        
+        # For our simplified schema, just update what we have
         if status == 'completed' and result:
-            update_fields.update({
-                'scraped_at': now,
-                'raw_html_path': result.raw_html_path,
-                'screenshot_path': result.screenshot_path,  
-                'metadata_json_path': result.metadata_json_path,
-                'scrape_metadata': json.dumps(result.scrape_metadata),
-                'extracted_data': json.dumps(result.extracted_data),
-                'error_message': None
-            })
-        elif status in ['failed', 'retry']:
-            # Increment attempt count and calculate next retry time
-            if status == 'retry':
-                update_fields['next_retry_at'] = now + self._calculate_retry_delay(1)  # Will be updated based on current attempts
-            if error_message:
-                update_fields['error_message'] = error_message
-        
-        # Build dynamic SQL update
-        set_clauses = []
-        values = []
-        for field, value in update_fields.items():
-            if field == 'updated_at':
-                set_clauses.append(f"{field} = now()")
-            elif field in ['scrape_metadata', 'extracted_data']:
-                set_clauses.append(f"{field} = %s::jsonb")
-                values.append(value)
-            else:
-                set_clauses.append(f"{field} = %s")
-                values.append(value)
-        
-        # Handle attempt count increment and retry delay
-        if status in ['failed', 'retry']:
-            set_clauses.append("attempt_count = attempt_count + 1")
-            if status == 'retry':
-                set_clauses.append("next_retry_at = now() + interval '%s seconds' * (2 ^ attempt_count)")
-                values.append(self.retry_delay_base)
-        
-        values.append(raw_id)  # for WHERE clause
-        
-        query = f"""
-            UPDATE public.linkedin_posts_raw 
-            SET {', '.join(set_clauses)}
-            WHERE id = %s
-        """
-        
-        with psycopg.connect(self.database_url) as conn:
-            conn.execute("SET TIME ZONE 'UTC'")
-            conn.execute(query, values)
+            with psycopg.connect(self.database_url) as conn:
+                conn.execute("""
+                    UPDATE public.linkedin_posts_raw 
+                    SET success = true,
+                        raw_html_path = %s,
+                        screenshot_path = %s,
+                        extracted_data = %s,
+                        scraped_at = now()
+                    WHERE id = %s
+                """, [
+                    result.raw_html_path,
+                    result.screenshot_path,
+                    json.dumps(result.extracted_data),
+                    raw_id
+                ])
+        else:
+            # Just mark as not successful for now
+            with psycopg.connect(self.database_url) as conn:
+                conn.execute("""
+                    UPDATE public.linkedin_posts_raw 
+                    SET success = false
+                    WHERE id = %s
+                """, [raw_id])
     
     async def process_post_queue(self, batch_size: int = None) -> Dict[str, Any]:
         """
@@ -319,14 +277,11 @@ class LinkedInPostsRouter:
             COUNT(*) FILTER (WHERE ll.status = 'queued' AND ll.classification = 'post') as queued_links,
             COUNT(*) FILTER (WHERE ll.status = 'scraping' AND ll.classification = 'post') as scraping_links,
             COUNT(*) FILTER (WHERE ll.status = 'scraped' AND ll.classification = 'post') as scraped_links,
-            COUNT(*) FILTER (WHERE lpr.status = 'pending') as pending_raw,
-            COUNT(*) FILTER (WHERE lpr.status = 'scraping') as scraping_raw,
-            COUNT(*) FILTER (WHERE lpr.status = 'completed') as completed_raw,
-            COUNT(*) FILTER (WHERE lpr.status = 'failed') as failed_raw,
-            COUNT(*) FILTER (WHERE lpr.status = 'retry') as retry_raw,
-            COUNT(*) FILTER (WHERE lpr.attempt_count >= lpr.max_attempts) as dead_letter,
-            AVG(lpr.attempt_count) FILTER (WHERE lpr.attempt_count > 0) as avg_attempts,
-            MIN(lpr.created_at) as oldest_pending,
+            COUNT(*) FILTER (WHERE ll.status = 'failed' AND ll.classification = 'post') as failed_links,
+            COUNT(*) FILTER (WHERE lpr.success = true) as successful_scrapes,
+            COUNT(*) FILTER (WHERE lpr.success = false) as failed_scrapes,
+            COUNT(lpr.id) as total_raw_entries,
+            MIN(ll.created_at) as oldest_pending,
             MAX(lpr.scraped_at) as latest_scraped
         FROM public.linkedin_links ll
         LEFT JOIN public.linkedin_posts_raw lpr ON ll.id = lpr.link_id
@@ -335,18 +290,20 @@ class LinkedInPostsRouter:
         
         with psycopg.connect(self.database_url) as conn:
             conn.execute("SET TIME ZONE 'UTC'")
-            row = conn.execute(stats_query).fetchone()
+            cursor = conn.execute(stats_query)
+            row = cursor.fetchone()
             
-        stats = dict(row._asdict())
+        # Convert row to dict manually since we get a tuple
+        column_names = [desc[0] for desc in cursor.description]
+        stats = dict(zip(column_names, row))
         
         # Convert timestamps to ISO format
         for key in ['oldest_pending', 'latest_scraped']:
             if stats[key]:
                 stats[key] = stats[key].isoformat()
         
-        # Round averages
-        if stats['avg_attempts']:
-            stats['avg_attempts'] = round(stats['avg_attempts'], 2)
+        # Add calculated fields if needed
+        # (avg_attempts removed as it's not in the current schema)
         
         return stats
 

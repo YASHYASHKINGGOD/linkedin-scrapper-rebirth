@@ -1,0 +1,4 @@
+# List of Google Sheets URLs to scan for LinkedIn links
+sheets:
+  - https://docs.google.com/spreadsheets/d/14OmQuYyreTa_ehui2vGXbydNpMsJCrCTArolMozuPG0/edit?gid=1790709853
+  # - https://docs.google.com/spreadsheets/d/OTHER_ID/edit

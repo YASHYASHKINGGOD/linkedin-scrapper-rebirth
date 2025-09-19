@@ -41,7 +41,7 @@ start:
 
 check: fmt lint typecheck test  ## local gate before commit
 
-# Scraper (Playwright) workers and dev helpers
+# Scraper (Jobs/Posts) workers and dev helpers
 scraper.worker:
 	CELERY_BROKER_URL?=redis://localhost:6379/0 ; \
 	CELERY_RESULT_BACKEND?=redis://localhost:6379/1 ; \
@@ -60,5 +60,26 @@ router.run-once:
 
 router.beat:
 	celery -A src.scraper.celery_app:app beat --loglevel=info
+
+# Scheduler (Google Sheets → DB) workers 
+scheduler.worker:
+	CELERY_BROKER_URL?=redis://localhost:6379/0 ; \
+	CELERY_RESULT_BACKEND?=redis://localhost:6379/1 ; \
+	celery -A src.scheduler_gs.celery_app:app worker --loglevel=info --concurrency=$${CONCURRENCY:-2}
+
+scheduler.beat:
+	CELERY_BROKER_URL?=redis://localhost:6379/0 ; \
+	CELERY_RESULT_BACKEND?=redis://localhost:6379/1 ; \
+	celery -A src.scheduler_gs.celery_app:app beat --loglevel=info
+
+scheduler.start:
+	@echo "Start scheduler: make scheduler.worker (terminal 1) and make scheduler.beat (terminal 2)"
+
+# Full pipeline: scheduler + scraper workers 
+pipeline.start:
+	@echo "Full pipeline requires 3 terminals:"
+	@echo "  Terminal 1: make scheduler.worker"
+	@echo "  Terminal 2: make scheduler.beat" 
+	@echo "  Terminal 3: make scraper.worker"
 
 ci: lint typecheck test

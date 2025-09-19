@@ -1,3 +1,4 @@
+# Core scraping dependencies (from pipeline-linkedin-posts)
 attrs==25.3.0
 certifi==2025.8.3
 charset-normalizer==3.4.3
@@ -26,3 +27,18 @@ urllib3==2.5.0
 webdriver-manager==4.0.2
 websocket-client==1.8.0
 wsproto==1.2.0
+
+# Google Sheets integration (from scheduler-gooogle-sheets)
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+PyYAML>=6.0
+gspread>=6.0.0
+beautifulsoup4>=4.11.0
+lxml>=4.9.0
+playwright>=1.40.0
+psycopg[binary]>=3.1.19
+
+# Celery orchestration (from scheduler-gooogle-sheets)
+celery>=5.3
+redis>=5.0

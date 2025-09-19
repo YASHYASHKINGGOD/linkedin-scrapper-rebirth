@@ -1,0 +1,80 @@
+{
+  "extraction_date": "2025-08-28T16:48:08.735627",
+  "total_posts": 4,
+  "posts_with_comments": 2,
+  "total_comments_extracted": 6,
+  "posts": [
+    {
+      "post_id": 1,
+      "author": "Aarti Sharma",
+      "post_date": "5h",
+      "comments_count": 1,
+      "comments": [
+        {
+          "commentor_name": "Karishma Seharawat",
+          "commentor_title": "",
+          "comment_text": "",
+          "comment_date": "1d",
+          "comment_likes": ""
+        }
+      ]
+    },
+    {
+      "post_id": 2,
+      "author": "Ramdev Saharan",
+      "post_date": "1d",
+      "comments_count": 5,
+      "comments": [
+        {
+          "commentor_name": "Sneha K.",
+          "commentor_title": "",
+          "comment_text": "",
+          "comment_date": "1d",
+          "comment_likes": ""
+        },
+        {
+          "commentor_name": "Sneha K.",
+          "commentor_title": "",
+          "comment_text": "",
+          "comment_date": "1d",
+          "comment_likes": ""
+        },
+        {
+          "commentor_name": "Rishav Bhowmick",
+          "commentor_title": "",
+          "comment_text": "",
+          "comment_date": "1d",
+          "comment_likes": ""
+        },
+        {
+          "commentor_name": "Rishav Bhowmick",
+          "commentor_title": "",
+          "comment_text": "",
+          "comment_date": "1d",
+          "comment_likes": ""
+        },
+        {
+          "commentor_name": "Durga Prasad Dash",
+          "commentor_title": "",
+          "comment_text": "",
+          "comment_date": "23h",
+          "comment_likes": ""
+        }
+      ]
+    },
+    {
+      "post_id": 3,
+      "author": "Artika Upadhyay",
+      "post_date": "17h",
+      "comments_count": 0,
+      "comments": []
+    },
+    {
+      "post_id": 4,
+      "author": "Manjusha M",
+      "post_date": "1d",
+      "comments_count": 0,
+      "comments": []
+    }
+  ]
+}

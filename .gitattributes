@@ -1,0 +1,21 @@
+# Merge attributes for cleaner branch integration
+# Documentation files use union merge (combine both sides)
+docs/** merge=union
+*.md merge=union
+
+# Lock files always prefer ours (main branch)
+poetry.lock merge=ours
+package-lock.json merge=ours
+yarn.lock merge=ours
+*.lock merge=ours
+
+# Test snapshots prefer ours
+*.snap merge=ours
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary

@@ -1,0 +1,65 @@
+# Merge Strategy Map for new_main Integration
+# This documents which branch owns which files for deterministic conflict resolution
+
+merge_sequence:
+  1: extractor-google-sheets
+  2: pipeline-linkedin-posts  
+  3: scraper-jobs-integrate
+  4: scheduler-gooogle-sheets
+
+# File ownership rules (THEIRS = incoming branch, OURS = current/main)
+branch_ownership:
+  extractor-google-sheets:
+    theirs:
+      - "src/extractor/google_sheets/**"
+      - "src/clients/google_sheets.py" 
+      - "src/ingest/**"
+      - "src/db/import_and_backup.py"
+      - "src/db/classify_and_queue.py"
+      - "tests/test_google_sheets*"
+      - "tests/test_io_write_csv.py"
+      - "tests/test_dedupe.py"
+    ours:
+      - "src/app.py"  # Keep main's version initially
+      - "Makefile"
+      - "requirements.txt"  # Will merge manually
+
+  pipeline-linkedin-posts:
+    theirs:
+      - "src/routers/posts_router.py"
+      - "src/workers/posts_worker.py"
+      - "src/pipeline/orchestrator.py"
+      - "src/db/migrations/create_posts_table.py"
+      - "apps/scraper-playwright/posts/**"
+      - "async_database_scraper.py"
+      - "src/db/import_and_backup.py"  # Prefer newer version
+      - "src/db/classify_and_queue.py"  # Prefer newer version
+    ours:
+      - "src/app.py"  # Keep extractor's version
+
+  scraper-jobs-integrate:
+    theirs:
+      - "src/router/route.py"
+      - "src/scraper/tasks.py"
+      - "apps/scraper-playwright/jobs/**"
+    ours:
+      - "src/routers/posts_router.py"  # Keep pipeline's version
+      - "src/workers/posts_worker.py"   # Keep pipeline's version
+
+  scheduler-gooogle-sheets:
+    theirs:
+      - "src/scheduler_gs/**"
+    ours:
+      - "src/router/route.py"  # Keep scraper-jobs version
+
+# Shared files strategy
+shared_files:
+  manual_merge:
+    - "requirements.txt"
+    - ".env.example" 
+    - "Makefile"
+  prefer_main:
+    - ".gitignore"
+    - "README.md"  # Update after integration
+  union_merge:
+    - "docs/**"  # Handled by .gitattributes

@@ -254,27 +254,86 @@ class LinkedInXPathScraper:
     
     # ========== XPATH EXTRACTION METHODS ==========
     
-    def _get_post_root(self):
-        """Find the main post container using XPath"""
-        root_xpaths = [
-            "//article[@data-activity-urn]",
-            "//article[contains(@class,'main-feed-activity-card')]",
-            "//article",
-            "//main", 
-            "//div[contains(@class,'feed-shared-update')]",
+    def _get_post_root(self, activity_id: Optional[str] = None):
+        """Find the main post container using XPath with strong disambiguation
+
+        On LinkedIn permalinks, comments and other widgets can include nested
+        structures that superficially resemble the post. We prefer the article
+        that (a) declares a data-activity-urn and (b) contains the entity
+        lockup and the commentary region, which comments do not.
+        """
+
+        # Try the most specific candidates first: article with activity urn,
+        # an entity lockup header, and a commentary block.
+        priority_xpaths = [
+            "//article[@data-activity-urn and .//*[@data-test-id='main-feed-activity-card__entity-lockup'] and .//*[@data-test-id='main-feed-activity-card__commentary']]",
+            "//article[contains(@class,'main-feed-activity-card') and .//*[@data-test-id='main-feed-activity-card__commentary']]",
         ]
-        
-        for xpath in root_xpaths:
+
+        # If we know the activity id from the URL, target it explicitly.
+        if activity_id:
+            targeted = [
+                f"//article[contains(@data-activity-urn,'activity:{activity_id}') and .//*[@data-test-id='main-feed-activity-card__commentary']]",
+                f"//article[contains(@data-urn,'activity:{activity_id}') and .//*[@data-test-id='main-feed-activity-card__commentary']]",
+            ]
+            for xpath in targeted:
+                try:
+                    roots = self.driver.find_elements(By.XPATH, xpath)
+                    if roots:
+                        logger.debug(f"✅ Found targeted post root with: {xpath}")
+                        return roots[0]
+                except Exception as e:
+                    logger.debug(f"XPath {xpath} failed: {e}")
+
+        for xpath in priority_xpaths:
             try:
                 roots = self.driver.find_elements(By.XPATH, xpath)
                 if roots:
-                    logger.debug(f"✅ Found post root with: {xpath}")
+                    logger.debug(f"✅ Found specific post root with: {xpath}")
                     return roots[0]
             except Exception as e:
                 logger.debug(f"XPath {xpath} failed: {e}")
-                continue
-        
+
+        # Fall back to any article that has both lockup and commentary.
+        fallbacks = [
+            "//article[.//*[@data-test-id='main-feed-activity-card__entity-lockup'] and .//*[@data-test-id='main-feed-activity-card__commentary']]",
+            "//article[@data-activity-urn]",
+            "//article[contains(@class,'main-feed-activity-card')]",
+        ]
+        for xpath in fallbacks:
+            try:
+                roots = self.driver.find_elements(By.XPATH, xpath)
+                if roots:
+                    logger.debug(f"✅ Found fallback post root with: {xpath}")
+                    return roots[0]
+            except Exception as e:
+                logger.debug(f"XPath {xpath} failed: {e}")
+
+        # Last resorts (broad). Avoid using these unless nothing else works.
+        broad = [
+            "//main//article",
+            "//div[contains(@class,'feed-shared-update')]//article",
+        ]
+        for xpath in broad:
+            try:
+                roots = self.driver.find_elements(By.XPATH, xpath)
+                if roots:
+                    logger.debug(f"⚠️ Using broad post root with: {xpath}")
+                    return roots[0]
+            except Exception as e:
+                logger.debug(f"XPath {xpath} failed: {e}")
+
         raise RuntimeError("Post root element not found with any XPath selector")
+
+    @staticmethod
+    def _activity_id_from_url(post_url: str) -> Optional[str]:
+        """Extract the numeric activity id from a LinkedIn post URL, if present."""
+        try:
+            import re
+            m = re.search(r"activity:(\d+)", post_url)
+            return m.group(1) if m else None
+        except Exception:
+            return None
     
     def _expand_post_content(self, root):
         """Expand truncated post content using XPath"""
@@ -318,23 +377,12 @@ class LinkedInXPathScraper:
         # Expand content first
         self._expand_post_content(root)
         
+        # Only consider elements under the official commentary container to
+        # avoid accidentally capturing comment text.
         post_text_xpaths = [
-            # Primary: commentary container
             ".//*[@data-test-id='main-feed-activity-card__commentary']",
-            
-            # Secondary: specific content segments
             ".//*[@data-test-id='main-feed-activity-card__commentary']//*[contains(@class,'attributed-text-segment-list__content')]",
-            
-            # Fallback: any attributed segments
-            ".//p[contains(@class,'attributed-text-segment-list__content')]",
-            
-            # Alternative approaches
-            ".//*[contains(@class,'feed-shared-text')]",
-            ".//*[contains(@class,'update-components-text')]",
-            ".//p[contains(@class,'break-words')]",
-            
-            # Very broad fallback
-            ".//div[contains(@data-test-id,'commentary')]//p"
+            ".//*[@data-test-id='main-feed-activity-card__commentary']//p[contains(@class,'break-words')]",
         ]
         
         texts = []
@@ -383,9 +431,11 @@ class LinkedInXPathScraper:
         # Extract author name and profile URL
         author_xpaths = [
             ".//a[@data-tracking-control-name='public_post_feed-actor-name']",
-            ".//a[contains(@href,'/in/')]",
-            ".//a[contains(@class,'app-aware-link')]",
-            ".//*[contains(@class,'feed-shared-actor__name')]//a"
+            ".//a[contains(@data-tracking-control-name,'actor-name')]",
+            ".//*[contains(@class,'feed-shared-actor__name')]//a",
+            ".//*[contains(@class,'update-components-actor__name')]//a",
+            ".//a[contains(@href,'/in/') and contains(@class,'app-aware-link')]",
+            ".//h3//a[contains(@href,'/in/')]",
         ]
         
         for xpath in author_xpaths:
@@ -404,7 +454,8 @@ class LinkedInXPathScraper:
             ".//p[contains(@class,'text-color-text-low-emphasis')]",
             ".//*[contains(@class,'feed-shared-actor__description')]",
             ".//*[contains(@class,'feed-shared-actor__sub-description')]",
-            ".//p[contains(@class,'text-body-small')]"
+            ".//*[contains(@class,'update-components-actor__description')]",
+            ".//p[contains(@class,'text-body-small')]",
         ]
         
         for xpath in title_xpaths:
@@ -461,8 +512,7 @@ class LinkedInXPathScraper:
         
         link_xpaths = [
             ".//*[@data-test-id='main-feed-activity-card__commentary']//a[@href]",
-            ".//p[contains(@class,'attributed-text-segment-list__content')]//a[@href]",
-            ".//*[contains(@class,'feed-shared-text')]//a[@href]"
+            ".//*[@data-test-id='main-feed-activity-card__commentary']//*[contains(@class,'attributed-text-segment-list__content')]//a[@href]",
         ]
         
         links = []
@@ -471,6 +521,9 @@ class LinkedInXPathScraper:
                 link_elements = root.find_elements(By.XPATH, xpath)
                 for link_elem in link_elements:
                     href = (link_elem.get_attribute('href') or '').strip()
+                    # Skip internal anchors like hashtags or in-app mentions without http(s)
+                    if not href or not href.startswith('http'):
+                        continue
                     if href and href not in links:
                         links.append(href)
                         logger.debug(f"✅ Found link: {href}")
@@ -523,10 +576,10 @@ class LinkedInXPathScraper:
             logger.debug(f"Failed to open comments: {e}")
         
         comments = []
+        # Scope comments under the comments list to avoid picking random elements.
         comment_xpaths = [
-            "//section[contains(@class,'comment')]",
-            "//div[contains(@class,'comment__body')]",
-            "//*[contains(@class,'comments-comment-item')]"
+            "//div[contains(@data-test-id,'comments') or contains(@class,'comments')]/descendant::article[contains(@class,'comment') or contains(@data-test-id,'comment')]|//li[contains(@class,'comments-comment-item')]",
+            "//div[contains(@data-test-id,'comments') or contains(@class,'comments')]//*[contains(@class,'comment__body') or contains(@class,'comments-comment-item')]",
         ]
         
         for xpath in comment_xpaths:
@@ -537,7 +590,7 @@ class LinkedInXPathScraper:
                     
                     for comment_elem in comment_elements[:limit]:
                         comment_data = self._extract_single_comment(comment_elem)
-                        if comment_data['comment_text'].strip():
+                        if comment_data.get('comment_text','').strip():
                             comments.append(comment_data)
                     break  # Use the first working XPath
             except Exception as e:
@@ -548,8 +601,8 @@ class LinkedInXPathScraper:
         return comments
     
     def _extract_single_comment(self, comment_elem) -> Dict[str, str]:
-        """Extract data from a single comment element"""
-        comment_data = {'commentor': '', 'comment_text': ''}
+        """Extract data from a single comment element, including links"""
+        comment_data = {'commentor': '', 'comment_text': '', 'links': []}
         
         # Extract commenter name
         commenter_xpaths = [
@@ -569,9 +622,9 @@ class LinkedInXPathScraper:
         
         # Extract comment text
         text_xpaths = [
-            ".//p[contains(@class,'comment__text')]",
-            ".//p[contains(@class,'attributed-text-segment-list__content')]",
-            ".//*[contains(@class,'comment-text')]"
+            ".//*[contains(@class,'comment__text')]",
+            ".//*[contains(@class,'attributed-text-segment-list__content')]",
+            ".//*[contains(@class,'comment-text')]",
         ]
         
         for xpath in text_xpaths:
@@ -582,7 +635,17 @@ class LinkedInXPathScraper:
                     break
             except NoSuchElementException:
                 continue
-        
+
+        # Extract any links inside the comment text
+        try:
+            link_elems = comment_elem.find_elements(By.XPATH, ".//a[@href]")
+            for a in link_elems:
+                href = (a.get_attribute('href') or '').strip()
+                if href.startswith('http') and href not in comment_data['links']:
+                    comment_data['links'].append(href)
+        except Exception:
+            pass
+
         return comment_data
     
     def _validate_scraping_quality(self, post_data: Dict[str, Any]) -> Tuple[bool, List[str]]:
@@ -643,7 +706,8 @@ class LinkedInXPathScraper:
             )
             
             # Get post root element
-            root = self._get_post_root()
+            activity_id = self._activity_id_from_url(post_url)
+            root = self._get_post_root(activity_id)
             
             # Extract all data using XPath
             logger.info("📊 Extracting post data...")
@@ -658,7 +722,7 @@ class LinkedInXPathScraper:
             post_data = {
                 'post_url': post_url,
                 'scraped_at': datetime.now().isoformat(),
-                'scraper_version': 'xpath-fixed-1.0',
+                'scraper_version': 'xpath-fixed-1.1',
                 'post_text': post_text,
                 'post_author': author,
                 'author_title': author_title,

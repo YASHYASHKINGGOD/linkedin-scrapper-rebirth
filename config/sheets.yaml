@@ -1,4 +1,5 @@
-# List of Google Sheets URLs to scan for LinkedIn links
+# Real Google Sheets URLs for LinkedIn scraping pipeline
 sheets:
-  - https://docs.google.com/spreadsheets/d/14OmQuYyreTa_ehui2vGXbydNpMsJCrCTArolMozuPG0/edit?gid=1790709853
-  # - https://docs.google.com/spreadsheets/d/OTHER_ID/edit
+  - https://docs.google.com/spreadsheets/d/1p7O7tUBYM94IqEmIlXp8a5B0nGdX8DwP-bmVFu0FAK0/edit?gid=895300124#gid=895300124
+  - https://docs.google.com/spreadsheets/d/14OmQuYyreTa_ehui2vGXbydNpMsJCrCTArolMozuPG0/edit?gid=994067677#gid=994067677
+  - https://docs.google.com/spreadsheets/d/1uwqOFQpzGCoXU25YtTZ52LweI4W2MVbQ3JxAIGTka6Q/edit?gid=485805970#gid=485805970

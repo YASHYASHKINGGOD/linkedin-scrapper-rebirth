@@ -28,3 +28,4 @@ celerybeat-schedule-wal
 # Local config (use the .sample file in repo)
 config/sheets.yaml
 
+google_token.json

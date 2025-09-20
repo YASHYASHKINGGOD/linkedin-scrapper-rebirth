@@ -43,7 +43,13 @@ def scrape_job(self, message: Dict[str, Any]) -> Dict[str, Any]:
     
     Returns: {"ok": bool, "link_id": int, "artifacts": dict}
     """
-    from src.scraper.dev import scrape_single_job
+    # Use existing scraper with login capability
+    from batch_linkedin_scraper_base import BatchLinkedInScraper
+    from selenium.webdriver.common.by import By
+    import json
+    import os
+    import time
+    import random
     
     link_id = int(message.get("link_id"))
     url = str(message.get("url"))
@@ -87,10 +93,89 @@ def scrape_job(self, message: Dict[str, Any]) -> Dict[str, Any]:
             "trace_id": trace_id
         }
     
-    # Step 2: Scrape the job
+    # Step 2: Scrape the job using existing scraper with login
     try:
-        # Use existing scraper logic
-        scrape_result = scrape_single_job(url, headed=False)
+        # Load config and initialize scraper with login
+        with open('./config.json', 'r') as f:
+            config = json.load(f)
+        
+        scraper = BatchLinkedInScraper(config=config)
+        scraper.setup_driver()
+        
+        # Login to LinkedIn
+        credentials = config.get('linkedin_credentials', {})
+        email = credentials.get('email')
+        password = credentials.get('password')
+        
+        if not scraper.login_to_linkedin(email, password):
+            raise Exception("Failed to login to LinkedIn")
+        
+        # Navigate to the job URL and scrape
+        scraper.driver.get(url)
+        time.sleep(random.uniform(2.0, 4.0))
+        
+        # Extract job data using existing selectors
+        try:
+            # Get page title for role
+            title = scraper.driver.title
+            role_title = ""
+            if title:
+                for sep in [" - ", " | ", " • "]:
+                    if sep in title:
+                        role_title = title.split(sep)[0].strip()
+                        break
+            
+            # Extract company, location, etc. using basic selectors
+            def safe_get_text(selector):
+                try:
+                    element = scraper.driver.find_element(By.CSS_SELECTOR, selector)
+                    return element.text.strip()
+                except:
+                    return ""
+            
+            company_name = safe_get_text("a[data-tracking-control-name*='topcard_org_name']") or safe_get_text(".topcard__org-name-link")
+            location = safe_get_text(".topcard__flavor-row .topcard__flavor--bullet")
+            posted_time = safe_get_text(".posted-time-ago__text")
+            
+            # Get description
+            try:
+                desc_element = scraper.driver.find_element(By.CSS_SELECTOR, ".description__text")
+                description_text = desc_element.text.strip()
+            except:
+                description_text = ""
+            
+            # Get raw HTML and take screenshot
+            html_content = scraper.driver.page_source
+            
+            # Create storage paths
+            timestamp = int(time.time())
+            storage_dir = f"./storage/scrape/jobs/{timestamp}"
+            os.makedirs(storage_dir, exist_ok=True)
+            
+            html_path = f"{storage_dir}/job.html"
+            screenshot_path = f"{storage_dir}/screenshot.png"
+            
+            # Save HTML
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
+            
+            # Take screenshot
+            scraper.driver.save_screenshot(screenshot_path)
+            
+            scrape_result = {
+                "ok": True,
+                "url": url,
+                "role_title": role_title,
+                "company_name": company_name,
+                "location": location,
+                "posted_time": posted_time,
+                "description_text": description_text,
+                "html_path": html_path,
+                "screenshot_path": screenshot_path,
+            }
+            
+        finally:
+            scraper.driver.quit()
         
         # Step 3: Persist to linkedin_jobs_raw
         with psycopg.connect(db_url) as conn:

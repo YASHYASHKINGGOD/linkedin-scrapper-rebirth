@@ -1,8 +1,6 @@
 from __future__ import annotations
 import os
 import json
-from typing import List
-=======
 from typing import List, Iterable
 import yaml  # type: ignore
 from src.extractor.common.io import write_jsonl
@@ -58,15 +56,6 @@ def extract_from_urls(urls: List[str]) -> List[str]:
     return unique
 
 
-<<<<<<< HEAD
-if __name__ == "__main__":
-    url_env = os.environ.get("GOOGLE_SHEETS_URLS", "").strip()
-    if not url_env:
-        raise SystemExit("Set GOOGLE_SHEETS_URLS to a comma-separated list of Google Sheet URLs.")
-    urls = [u.strip() for u in url_env.split(",") if u.strip()]
-    result = extract_from_urls(urls)
-    print(json.dumps({"count": len(result), "links": result}, indent=2))
-=======
 def load_urls_from_env_and_config() -> List[str]:
     urls: List[str] = []
     # From env list
@@ -195,4 +184,3 @@ if __name__ == "__main__":
         out_path = os.environ.get("OUTPUT_JSONL", "./storage/linkedin_links.jsonl")
         written = save_links_jsonl(result, urls, out_path)
         print(json.dumps({"count": len(result), "written": written, "output": out_path}, indent=2))
->>>>>>> extractor-google-sheets

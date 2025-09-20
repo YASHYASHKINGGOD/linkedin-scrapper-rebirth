@@ -6,6 +6,7 @@ from typing import Optional
 import random
 
 from playwright.sync_api import sync_playwright
+from .login import setup_authenticated_context, check_login_required, load_linkedin_credentials
 
 OUT_DIR = os.environ.get("SCRAPER_OUT_DIR", "./storage/scrape")
 HEADLESS_DEFAULT = os.environ.get("SCRAPER_HEADLESS", "true").lower() == "true"

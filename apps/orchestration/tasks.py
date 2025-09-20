@@ -20,6 +20,13 @@ import uuid
 from typing import List, Dict, Any
 from celery import shared_task, chain
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # Import existing functionality
 from src.ingest.combined_links_csv import run_combined_csv
 from src.db.import_and_backup import import_and_backup

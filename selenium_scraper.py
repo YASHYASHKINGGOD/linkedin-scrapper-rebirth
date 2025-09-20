@@ -98,6 +98,17 @@ class LinkedInSeleniumScraper:
         width, height = self.config['chrome_options']['window_size']
         chrome_options.add_argument(f"--window-size={width},{height}")
         
+        # Session persistence - CRITICAL for maintaining login state
+        user_data_dir = self.config['chrome_options'].get('user_data_dir')
+        if user_data_dir:
+            chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
+            logger.info(f"Using Chrome profile directory: {user_data_dir}")
+        
+        profile_directory = self.config['chrome_options'].get('profile_directory')
+        if profile_directory:
+            chrome_options.add_argument(f"--profile-directory={profile_directory}")
+            logger.info(f"Using Chrome profile: {profile_directory}")
+        
         # Headless mode
         if self.config['scraping_settings']['headless']:
             chrome_options.add_argument("--headless")
@@ -108,6 +119,9 @@ class LinkedInSeleniumScraper:
         # Additional stealth options
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
+        chrome_options.add_experimental_option("prefs", {
+            "profile.default_content_setting_values.notifications": 2
+        })
         
         # Set up Chrome driver service
         service = Service(ChromeDriverManager().install())
@@ -179,9 +193,19 @@ class LinkedInSeleniumScraper:
         try:
             logger.info("Starting LinkedIn login process")
             
+            # First check if we're already logged in from saved session
+            logger.info("Checking for existing login session...")
+            self.driver.get("https://www.linkedin.com/feed")
+            self._random_delay(2.0, 3.0)
+            
+            current_url = self.driver.current_url
+            if any(pattern in current_url.lower() for pattern in ['feed', 'mynetwork', 'jobs', '/in/', 'messaging']):
+                logger.info("✅ Already logged in from saved session!")
+                return True, "Already authenticated from saved session"
+            
             # Navigate to LinkedIn login page
             login_url = "https://www.linkedin.com/login"
-            logger.info(f"Navigating to {login_url}")
+            logger.info(f"Need to login - navigating to {login_url}")
             self.driver.get(login_url)
             
             # Random delay after navigation

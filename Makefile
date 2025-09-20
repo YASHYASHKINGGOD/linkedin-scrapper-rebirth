@@ -21,6 +21,28 @@ test:
 	[ -f package.json ] && npm test --silent || true
 	[ -f pytest.ini -o -f pyproject.toml -o -f requirements.txt -o -d tests ] && pytest -q || true
 
+test.live:
+	# Run tests with real Google Sheets data
+	@echo "Running live tests with real data..."
+	LIVE_TESTS=1 pytest tests/live -v -s
+
+test.components:
+	# Run component tests (may use real data if credentials available)
+	pytest tests/components -v
+
+test.unit:
+	# Run only unit tests (no external dependencies)
+	pytest tests/unit -v
+
+test.integration:
+	# Run integration tests
+	pytest tests/integration -v
+
+test.smoke:
+	# Quick smoke test to verify setup
+	@echo "Running smoke test to verify configuration..."
+	python test_smoke.py
+
 lint:
 	[ -f package.json ] && npm run lint || true
 	command -v ruff >/dev/null 2>&1 && ruff check . || true
@@ -68,6 +90,18 @@ orchestration.start:
 	@echo "  Terminal 2: make orchestration.beat"
 	@echo "  Optional monitoring: make orchestration.monitor"
 	@echo "  One-shot test: make orchestration.pipeline"
+
+test.e2e:
+	# End-to-end pipeline test with real data
+	@echo "Testing full pipeline with real Google Sheets..."
+	@echo "This will:"
+	@echo "  1. Ingest from real Google Sheets"
+	@echo "  2. Import to database"
+	@echo "  3. Classify links"
+	@echo "  4. Route to scraper queues"
+	@echo "Note: Requires running Celery worker and Redis/PostgreSQL"
+	@echo ""
+	LIVE_TESTS=1 pytest tests/live/test_ingest_live.py::test_live_full_import_and_classify -v -s
 
 # Legacy scraper helpers (for backward compatibility during transition)
 scraper.dev:

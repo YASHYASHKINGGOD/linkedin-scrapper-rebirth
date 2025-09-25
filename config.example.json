@@ -1,0 +1,38 @@
+{
+  "linkedin_credentials": {
+    "email": "your-email@example.com",
+    "password": "your-secure-password"
+  },
+  
+  "job_scraper": {
+    "batch_size": 10,
+    "delay_between_jobs": 3,
+    "max_retries": 3
+  },
+  
+  "anti_detection": {
+    "enabled": true,
+    "comment": "Enable advanced anti-detection features including browser fingerprinting avoidance"
+  },
+  
+  "proxy_rotation": {
+    "enabled": false,
+    "config_path": "./proxies.json",
+    "comment": "Enable proxy rotation for additional anonymity - requires proxy configuration"
+  },
+  
+  "behavioral_simulation": {
+    "enabled": true,
+    "comment": "Enable human-like behavioral patterns including realistic mouse movements and scrolling"
+  },
+  
+  "chrome_options": {
+    "user_data_dir": "./chrome_profile",
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  },
+  
+  "debug": {
+    "show_browser": false,
+    "comment": "Set to true to see browser window during scraping (disable headless mode)"
+  }
+}

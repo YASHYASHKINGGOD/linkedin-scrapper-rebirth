@@ -1,0 +1,45 @@
+{
+  "proxies": [
+    {
+      "host": "proxy1.example.com",
+      "port": 8080,
+      "username": "your_proxy_username",
+      "password": "your_proxy_password",
+      "protocol": "http",
+      "country": "US",
+      "city": "New York",
+      "is_residential": true
+    },
+    {
+      "host": "proxy2.example.com", 
+      "port": 3128,
+      "protocol": "http",
+      "country": "UK",
+      "city": "London",
+      "is_residential": false
+    },
+    {
+      "host": "proxy3.example.com",
+      "port": 8888,
+      "username": "username",
+      "password": "password", 
+      "protocol": "https",
+      "country": "DE",
+      "city": "Berlin",
+      "is_residential": true
+    }
+  ],
+  
+  "_comment": "This is a sample proxy configuration file. Replace with your actual proxy details.",
+  "_note": "You can get proxies from services like ProxyMesh, Bright Data, Oxylabs, etc.",
+  "_fields": {
+    "host": "Proxy server hostname or IP address",
+    "port": "Proxy server port number", 
+    "username": "Optional username for authenticated proxies",
+    "password": "Optional password for authenticated proxies",
+    "protocol": "http or https",
+    "country": "Country code for proxy location",
+    "city": "City name for proxy location",
+    "is_residential": "True if residential proxy, false if datacenter proxy"
+  }
+}
